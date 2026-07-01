@@ -6,7 +6,16 @@ import eslintPluginReactHooks from 'eslint-plugin-react-hooks'
 import eslintPluginReactRefresh from 'eslint-plugin-react-refresh'
 
 export default defineConfig(
-  { ignores: ['**/node_modules', '**/dist', '**/out'] },
+  {
+    // Composants/hook générés par le CLI shadcn (vendored) : hors périmètre de lint.
+    ignores: [
+      '**/node_modules',
+      '**/dist',
+      '**/out',
+      'src/renderer/src/components/ui/**',
+      'src/renderer/src/hooks/use-mobile.ts'
+    ]
+  },
   tseslint.configs.recommended,
   eslintPluginReact.configs.flat.recommended,
   eslintPluginReact.configs.flat['jsx-runtime'],

@@ -1,34 +1,20 @@
-import Versions from './components/Versions'
-import electronLogo from './assets/electron.svg'
+import { Sidebar } from './components/Sidebar'
+import { WebViewArea } from './components/WebViewArea'
+import { useTabEvents } from './hooks/useTabEvents'
+import { useSidebarLayout } from './hooks/useSidebarLayout'
+import { useSession, usePersistUiState } from './hooks/useSession'
 
 function App(): React.JSX.Element {
-  const ipcHandle = (): void => window.electron.ipcRenderer.send('ping')
+  const ready = useSession() // hydrate depuis la session persistée
+  useTabEvents() // applique les patchs batchés du Main
+  useSidebarLayout() // émet les intentions de layout vers le Main
+  usePersistUiState(ready) // persiste l'état UI organisationnel
 
   return (
-    <>
-      <img alt="logo" className="logo" src={electronLogo} />
-      <div className="creator">Powered by electron-vite</div>
-      <div className="text">
-        Build an Electron app with <span className="react">React</span>
-        &nbsp;and <span className="ts">TypeScript</span>
-      </div>
-      <p className="tip">
-        Please try pressing <code>F12</code> to open the devTool
-      </p>
-      <div className="actions">
-        <div className="action">
-          <a href="https://electron-vite.org/" target="_blank" rel="noreferrer">
-            Documentation
-          </a>
-        </div>
-        <div className="action">
-          <a target="_blank" rel="noreferrer" onClick={ipcHandle}>
-            Send IPC
-          </a>
-        </div>
-      </div>
-      <Versions></Versions>
-    </>
+    <div className="flex h-screen w-screen overflow-hidden bg-background">
+      <Sidebar />
+      <WebViewArea />
+    </div>
   )
 }
 
