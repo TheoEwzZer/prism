@@ -1,0 +1,151 @@
+import { BrowserWindow } from 'electron'
+import { join } from 'path'
+import { is } from '@electron-toolkit/utils'
+import { IPC, type SiteControlPayload } from '@shared/types'
+
+/**
+ * Couche d'overlay UNIQUE (approche B). Une seule fenêtre transparente, sans cadre,
+ * always-on-top, **persistante**, qui recouvre exactement la zone contenu de la fenêtre
+ * principale et flotte AU-DESSUS de la `WebContentsView`. Elle héberge TOUTE l'UI au-dessus de
+ * la page (peek de la sidebar, Contrôles du site, futurs menus) en DOM React.
+ *
+ * Avantages vs une fenêtre par overlay : ouverture **instantanée** (aucune création de fenêtre
+ * par ouverture, plus de démarrage à froid du bundle), animations CSS, un seul process, et des
+ * coordonnées client alignées 1:1 sur la fenêtre principale (l'overlay est calé sur ses bounds).
+ *
+ * La fenêtre reste toujours affichée mais **transparente et click-through** au repos
+ * (`setIgnoreMouseEvents(true, { forward: true })`) : elle est invisible et laisse passer la
+ * souris vers la page. Le renderer fait un hit-test sur `mousemove` (forwardé même en mode
+ * ignore) et demande la capture (`ignore=false`) au survol d'un panneau, puis rend la main.
+ */
+export class OverlayLayer {
+  private win: BrowserWindow | null = null
+  private ready = false
+  private siteControl: SiteControlPayload | null = null
+  private peekOpen = false
+
+  private readonly track = (): void => this.applyBounds()
+
+  constructor(private readonly parent: BrowserWindow) {
+    this.ensureWindow()
+    parent.on('resize', this.track)
+    parent.on('move', this.track)
+    parent.on('maximize', this.track)
+    parent.on('unmaximize', this.track)
+    parent.on('restore', this.track)
+  }
+
+  // --- Commandes depuis la fenêtre principale ---
+
+  showSiteControl(payload: SiteControlPayload): void {
+    this.siteControl = payload
+    const win = this.ensureWindow()
+    // Menu au clic : on prend le focus pour pouvoir se fermer au clic extérieur (blur) et gérer
+    // Échap. Le focus est indépendant du click-through (géré par hit-test côté renderer).
+    win.focus()
+    this.send(IPC.OVERLAY_SITE_CONTROL_DATA, payload)
+  }
+
+  hideSiteControl(): void {
+    this.siteControl = null
+    this.send(IPC.OVERLAY_SITE_CONTROL_DATA, null)
+  }
+
+  openPeek(width: number): void {
+    this.peekOpen = true
+    this.send(IPC.SIDEBAR_PEEK_STATE, { open: true, width })
+  }
+
+  closePeek(): void {
+    this.peekOpen = false
+    this.send(IPC.SIDEBAR_PEEK_STATE, { open: false, width: 0 })
+  }
+
+  /** Bascule le click-through demandé par le renderer (hit-test des panneaux). */
+  setIgnore(ignore: boolean): void {
+    const win = this.win
+    if (!win || win.isDestroyed()) return
+    if (ignore) win.setIgnoreMouseEvents(true, { forward: true })
+    else win.setIgnoreMouseEvents(false)
+  }
+
+  /** Relaie un event (ex. `tab:updated`) à la couche pour la garder synchronisée. */
+  forward(channel: string, payload: unknown): void {
+    if (this.win && !this.win.isDestroyed()) this.win.webContents.send(channel, payload)
+  }
+
+  private send(channel: string, payload: unknown): void {
+    if (this.win && !this.win.isDestroyed() && this.ready) {
+      this.win.webContents.send(channel, payload)
+    }
+  }
+
+  private ensureWindow(): BrowserWindow {
+    if (this.win && !this.win.isDestroyed()) return this.win
+
+    const win = new BrowserWindow({
+      parent: this.parent,
+      transparent: true,
+      frame: false,
+      resizable: false,
+      movable: false,
+      minimizable: false,
+      maximizable: false,
+      skipTaskbar: true,
+      hasShadow: false,
+      show: false,
+      alwaysOnTop: true,
+      focusable: true,
+      webPreferences: {
+        preload: join(__dirname, '../preload/index.js'),
+        sandbox: false,
+        contextIsolation: true,
+        nodeIntegration: false
+      }
+    })
+    win.setMenu(null)
+    this.win = win
+    this.ready = false
+
+    win.webContents.on('did-finish-load', () => {
+      this.ready = true
+      this.applyBounds()
+      this.setIgnore(true) // repos : click-through
+      win.showInactive() // affichée en permanence, sans voler le focus
+      // Resynchronise l'état courant après (re)chargement.
+      this.send(IPC.OVERLAY_SITE_CONTROL_DATA, this.siteControl)
+      this.send(IPC.SIDEBAR_PEEK_STATE, { open: this.peekOpen, width: 0 })
+    })
+
+    const query = 'overlay=layer'
+    if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
+      win.loadURL(`${process.env['ELECTRON_RENDERER_URL']}?${query}`)
+    } else {
+      win.loadFile(join(__dirname, '../renderer/index.html'), { search: query })
+    }
+
+    win.on('closed', () => {
+      if (this.win === win) {
+        this.win = null
+        this.ready = false
+      }
+    })
+    return win
+  }
+
+  private applyBounds(): void {
+    if (!this.win || this.win.isDestroyed()) return
+    const cb = this.parent.getContentBounds()
+    this.win.setBounds({ x: cb.x, y: cb.y, width: cb.width, height: cb.height })
+  }
+
+  dispose(): void {
+    this.parent.removeListener('resize', this.track)
+    this.parent.removeListener('move', this.track)
+    this.parent.removeListener('maximize', this.track)
+    this.parent.removeListener('unmaximize', this.track)
+    this.parent.removeListener('restore', this.track)
+    if (this.win && !this.win.isDestroyed()) this.win.close()
+    this.win = null
+  }
+}

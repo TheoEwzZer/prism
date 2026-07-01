@@ -91,20 +91,20 @@ export const IPC = {
   SESSION_SAVE_UI: 'session:saveUi',
   OPEN_EXTERNAL: 'app:openExternal',
   CLIPBOARD_WRITE: 'app:clipboardWrite',
-  // Fenêtre-overlay native (flotte au-dessus de la WebContentsView sans la masquer)
-  OVERLAY_SITE_CONTROL: 'overlay:siteControl',
-  OVERLAY_GET_DATA: 'overlay:getData',
-  OVERLAY_RESIZE: 'overlay:resize',
-  OVERLAY_CLOSE: 'overlay:close',
-  // Peek de la sidebar repliée : fenêtre-overlay native qui flotte AU-DESSUS de la page
-  // (façon Arc), révélée au survol du bord gauche. Elle ne pousse jamais la vue web.
-  SIDEBAR_PEEK_OPEN: 'sidebar:peekOpen', // main -> Main (survol du bord gauche)
-  SIDEBAR_PEEK_CLOSE: 'sidebar:peekClose', // overlay -> Main (souris sortie du panneau)
+  // Couche d'overlay unique : UNE fenêtre transparente persistante qui recouvre toute la zone
+  // contenu et flotte AU-DESSUS de la WebContentsView (peek de la sidebar + Contrôles du site
+  // + futurs menus). Ouverture instantanée, animations CSS, click-through géré par hit-test.
+  OVERLAY_SITE_CONTROL: 'overlay:siteControl', // main -> Main : ouvrir les Contrôles du site
+  OVERLAY_CLOSE: 'overlay:close', // overlay -> Main : fermer les Contrôles du site
+  OVERLAY_SET_IGNORE: 'overlay:setIgnore', // overlay -> Main : capter/laisser passer la souris
+  SIDEBAR_PEEK_OPEN: 'sidebar:peekOpen', // main -> Main : survol du bord gauche
+  SIDEBAR_PEEK_CLOSE: 'sidebar:peekClose', // overlay -> Main : souris sortie du panneau
   WINDOW_MINIMIZE: 'window:minimize',
   WINDOW_MAXIMIZE: 'window:maximize',
   WINDOW_CLOSE: 'window:close',
   // Main -> Renderer (events)
-  SIDEBAR_PEEK_STATE: 'sidebar:peekState', // Main -> overlay (ouverture/fermeture animée)
+  OVERLAY_SITE_CONTROL_DATA: 'overlay:siteControlData', // Main -> overlay : push données (ou null)
+  SIDEBAR_PEEK_STATE: 'sidebar:peekState', // Main -> overlay : ouverture/fermeture animée
   TAB_UPDATED: 'tab:updated',
   TAB_CREATED: 'tab:created',
   TAB_CLOSED: 'tab:closed',
@@ -137,4 +137,11 @@ export interface SiteControlPayload {
   activeId: string | null
   anchorRight: number
   anchorBottom: number
+}
+
+/** État du peek de la sidebar poussé du Main vers la couche d'overlay. */
+export interface SidebarPeekState {
+  open: boolean
+  /** Largeur courante de la sidebar (px) pour dimensionner le panneau. */
+  width: number
 }

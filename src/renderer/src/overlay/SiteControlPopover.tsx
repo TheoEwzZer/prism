@@ -1,38 +1,26 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Lock, Globe, RotateCw, ExternalLink, Copy } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { SiteControlPayload } from '@shared/types'
 
+const PANEL_WIDTH = 300
+
 /**
- * Contenu des « Contrôles du site », rendu dans la fenêtre-overlay native transparente.
- * Récupère ses données via IPC, s'auto-dimensionne à son contenu, et se ferme sur action
- * ou Échap (la perte de focus est gérée côté Main).
+ * Popover « Contrôles du site », rendu DANS la couche d'overlay unique et positionné en
+ * coordonnées client (l'overlay est calé 1:1 sur la fenêtre principale) — aligné à droite sous
+ * le bouton ancre. `data-overlay-hit="site"` marque la zone interactive pour le hit-test.
+ * La fermeture (clic extérieur / Échap) est gérée par la couche.
  */
-export function SiteControlOverlay(): React.JSX.Element | null {
-  const [data, setData] = useState<SiteControlPayload | null>(null)
-  const ref = useRef<HTMLDivElement>(null)
+export function SiteControlPopover({ data }: { data: SiteControlPayload }): React.JSX.Element {
+  const { url, activeId, anchorRight, anchorBottom } = data
 
+  // Petite animation d'entrée (opacité + échelle).
+  const [shown, setShown] = useState(false)
   useEffect(() => {
-    window.prism.getOverlayData().then(setData)
+    const r = requestAnimationFrame(() => setShown(true))
+    return () => cancelAnimationFrame(r)
   }, [])
 
-  // Ajuste la fenêtre à la hauteur réelle du panneau.
-  useLayoutEffect(() => {
-    if (!data || !ref.current) return
-    window.prism.resizeOverlay({ width: 300, height: ref.current.offsetHeight })
-  }, [data])
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') window.prism.closeOverlay()
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [])
-
-  if (!data) return null
-
-  const { url, activeId } = data
   const secure = /^https:/i.test(url)
   let host = ''
   try {
@@ -41,12 +29,18 @@ export function SiteControlOverlay(): React.JSX.Element | null {
     host = ''
   }
 
-  const close = (): void => window.prism.closeOverlay()
+  const close = (): void => window.prism.closeSiteControl()
 
   return (
     <div
-      ref={ref}
-      className="w-[300px] overflow-hidden rounded-xl border border-white/10 bg-popover text-slate-200 shadow-2xl shadow-black/60"
+      data-overlay-hit="site"
+      style={{ top: anchorBottom + 6, left: anchorRight - PANEL_WIDTH, width: PANEL_WIDTH }}
+      className={cn(
+        'pointer-events-auto absolute origin-top-right overflow-hidden rounded-xl border',
+        'border-white/10 bg-popover text-slate-200 shadow-2xl shadow-black/60',
+        'transition-all duration-150 ease-out',
+        shown ? 'scale-100 opacity-100' : 'scale-95 opacity-0'
+      )}
     >
       <div className="flex items-center gap-2 border-b border-white/10 px-3 py-2.5">
         {secure ? (

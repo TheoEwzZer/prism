@@ -9,7 +9,8 @@ import {
   type SidebarIntent,
   type UiPersistState,
   type WindowState,
-  type SiteControlPayload
+  type SiteControlPayload,
+  type SidebarPeekState
 } from '@shared/types'
 
 /** Abonnement typé à un event Main -> Renderer ; retourne une fonction de désabonnement. */
@@ -41,19 +42,18 @@ const prism = {
   openExternal: (url: string): void => ipcRenderer.send(IPC.OPEN_EXTERNAL, url),
   copyText: (text: string): void => ipcRenderer.send(IPC.CLIPBOARD_WRITE, text),
 
-  // Fenêtre-overlay native « Contrôles du site »
+  // Couche d'overlay unique (au-dessus de la page). Depuis la fenêtre principale :
   openSiteControl: (payload: SiteControlPayload): void =>
     ipcRenderer.send(IPC.OVERLAY_SITE_CONTROL, payload),
-  getOverlayData: (): Promise<SiteControlPayload | null> =>
-    ipcRenderer.invoke(IPC.OVERLAY_GET_DATA),
-  resizeOverlay: (size: { width: number; height: number }): void =>
-    ipcRenderer.send(IPC.OVERLAY_RESIZE, size),
-  closeOverlay: (): void => ipcRenderer.send(IPC.OVERLAY_CLOSE),
-
-  // Peek de la sidebar repliée (fenêtre-overlay flottant au-dessus de la page)
   openSidebarPeek: (): void => ipcRenderer.send(IPC.SIDEBAR_PEEK_OPEN),
+  // Depuis la couche d'overlay elle-même :
+  closeSiteControl: (): void => ipcRenderer.send(IPC.OVERLAY_CLOSE),
   closeSidebarPeek: (): void => ipcRenderer.send(IPC.SIDEBAR_PEEK_CLOSE),
-  onSidebarPeekState: (cb: (state: { open: boolean }) => void): (() => void) =>
+  setOverlayIgnoreMouse: (ignore: boolean): void =>
+    ipcRenderer.send(IPC.OVERLAY_SET_IGNORE, ignore),
+  onSiteControlData: (cb: (payload: SiteControlPayload | null) => void): (() => void) =>
+    subscribe(IPC.OVERLAY_SITE_CONTROL_DATA, cb),
+  onSidebarPeekState: (cb: (state: SidebarPeekState) => void): (() => void) =>
     subscribe(IPC.SIDEBAR_PEEK_STATE, cb),
 
   // Contrôles de fenêtre (frameless)

@@ -9,8 +9,7 @@ import {
   type SiteControlPayload
 } from '@shared/types'
 import { TabManager } from '../tabs/TabManager'
-import { SiteControlOverlay } from '../overlay/SiteControlOverlay'
-import { SidebarPeekOverlay } from '../overlay/SidebarPeekOverlay'
+import { OverlayLayer } from '../overlay/OverlayLayer'
 import { FrameCoalescer } from '../utils/scheduler'
 import { saveSession, flushSession } from '../persistence/sessionStore'
 
@@ -43,8 +42,8 @@ export function setupBrowser(window: BrowserWindow, initialSession: SessionData)
     batchId += 1
     const batch = { batchId, patches }
     window.webContents.send(IPC.TAB_UPDATED, batch)
-    // Le peek de la sidebar est une fenêtre séparée : on lui relaie le même flux batché.
-    sidebarPeek.forwardBatch(IPC.TAB_UPDATED, batch)
+    // La couche d'overlay (peek de la sidebar) est une fenêtre séparée : on lui relaie le batch.
+    overlay.forward(IPC.TAB_UPDATED, batch)
     persist()
   }
   const patchCoalescer = new FrameCoalescer(flushPatches, 16)
@@ -56,8 +55,7 @@ export function setupBrowser(window: BrowserWindow, initialSession: SessionData)
   }
 
   const tabManager = new TabManager(window, emitPatch)
-  const siteControl = new SiteControlOverlay(window)
-  const sidebarPeek = new SidebarPeekOverlay(window)
+  const overlay = new OverlayLayer(window)
 
   // Restauration lazy : on enregistre les metas (hibernées), sans créer de vue.
   for (const meta of initialSession.tabs) tabManager.registerTab(meta)
@@ -114,19 +112,14 @@ export function setupBrowser(window: BrowserWindow, initialSession: SessionData)
   })
   ipcMain.on(IPC.CLIPBOARD_WRITE, (_e, text: string) => clipboard.writeText(text))
 
-  // Fenêtre-overlay native « Contrôles du site ».
+  // Couche d'overlay unique (au-dessus de la page).
   ipcMain.on(IPC.OVERLAY_SITE_CONTROL, (_e, payload: SiteControlPayload) =>
-    siteControl.open(payload)
+    overlay.showSiteControl(payload)
   )
-  ipcMain.handle(IPC.OVERLAY_GET_DATA, () => siteControl.getData())
-  ipcMain.on(IPC.OVERLAY_RESIZE, (_e, size: { width: number; height: number }) =>
-    siteControl.resize(size.width, size.height)
-  )
-  ipcMain.on(IPC.OVERLAY_CLOSE, () => siteControl.close())
-
-  // Peek de la sidebar repliée (fenêtre-overlay flottant au-dessus de la page).
-  ipcMain.on(IPC.SIDEBAR_PEEK_OPEN, () => sidebarPeek.open(session.sidebarWidth))
-  ipcMain.on(IPC.SIDEBAR_PEEK_CLOSE, () => sidebarPeek.close())
+  ipcMain.on(IPC.OVERLAY_CLOSE, () => overlay.hideSiteControl())
+  ipcMain.on(IPC.OVERLAY_SET_IGNORE, (_e, ignore: boolean) => overlay.setIgnore(ignore))
+  ipcMain.on(IPC.SIDEBAR_PEEK_OPEN, () => overlay.openPeek(session.sidebarWidth))
+  ipcMain.on(IPC.SIDEBAR_PEEK_CLOSE, () => overlay.closePeek())
 
   ipcMain.on(IPC.SESSION_SAVE_UI, (_e, ui: UiPersistState) => {
     session.order = ui.order
@@ -154,20 +147,12 @@ export function setupBrowser(window: BrowserWindow, initialSession: SessionData)
   window.on('maximize', sendWindowState)
   window.on('unmaximize', sendWindowState)
 
-  // Garde l'overlay de peek aligné sur la fenêtre principale s'il est ouvert.
-  const repositionPeek = (): void => sidebarPeek.reposition()
-  window.on('resize', repositionPeek)
-  window.on('move', repositionPeek)
-  window.on('maximize', repositionPeek)
-  window.on('unmaximize', repositionPeek)
-
   const dispose = (): void => {
     patchCoalescer.dispose()
     tabManager.dispose()
-    siteControl.dispose()
-    sidebarPeek.dispose()
+    overlay.dispose()
     // Retrait des handlers pour éviter les doublons en cas de recréation de fenêtre.
-    for (const ch of [IPC.SESSION_GET, IPC.TAB_CREATE, IPC.OVERLAY_GET_DATA]) {
+    for (const ch of [IPC.SESSION_GET, IPC.TAB_CREATE]) {
       ipcMain.removeHandler(ch)
     }
     ipcMain.removeAllListeners(IPC.TAB_CLOSE)
@@ -180,8 +165,8 @@ export function setupBrowser(window: BrowserWindow, initialSession: SessionData)
     ipcMain.removeAllListeners(IPC.OPEN_EXTERNAL)
     ipcMain.removeAllListeners(IPC.CLIPBOARD_WRITE)
     ipcMain.removeAllListeners(IPC.OVERLAY_SITE_CONTROL)
-    ipcMain.removeAllListeners(IPC.OVERLAY_RESIZE)
     ipcMain.removeAllListeners(IPC.OVERLAY_CLOSE)
+    ipcMain.removeAllListeners(IPC.OVERLAY_SET_IGNORE)
     ipcMain.removeAllListeners(IPC.SIDEBAR_PEEK_OPEN)
     ipcMain.removeAllListeners(IPC.SIDEBAR_PEEK_CLOSE)
     ipcMain.removeAllListeners(IPC.SESSION_SAVE_UI)

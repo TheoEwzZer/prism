@@ -55,9 +55,13 @@ Gère le cycle de vie des `WebContentsView`, le layout, le focus, l'hibernation.
 - **DevTools** : ouvert en natif via `openDevTools({ mode: 'right' })` sur la page active (`toggleDevTools`).
 - **Omnibox** : `normalizeInput()` décide URL directe vs domaine (→ `https://`) vs recherche Google.
 
-### Overlays natifs (Site Control Center)
+### Couche d'overlay unique (`src/main/overlay/OverlayLayer.ts`)
 
-Un popover React passerait **derrière** la `WebContentsView`. Les menus flottants sont donc des **fenêtres-overlay natives** : `src/main/overlay/SiteControlOverlay.ts` (transparente, sizée au contenu, auto-close au blur) charge la route `?overlay=siteControl` du **même bundle renderer** (`src/renderer/src/main.tsx` route vers `src/renderer/src/overlay/SiteControlOverlay.tsx`). Le Main convertit les coordonnées client (`anchorRight`/`anchorBottom`) en coordonnées écran. Ne pas remplacer par un popover DOM.
+Un popover DOM React passerait **derrière** la `WebContentsView`. Toute l'UI qui doit flotter au-dessus de la page (peek de la sidebar, « Contrôles du site », futurs menus) vit donc dans **UNE seule fenêtre-overlay native** transparente, sans cadre, always-on-top, **persistante**, calée en permanence sur la zone contenu de la fenêtre principale (`OverlayLayer.applyBounds`). Elle charge la route `?overlay=layer` du **même bundle renderer** (`src/renderer/src/main.tsx` → `src/renderer/src/overlay/OverlayLayer.tsx`, qui rend `PeekSidebar` + `SiteControlPopover`).
+
+Pourquoi une couche unique plutôt qu'une fenêtre par overlay : **ouverture instantanée** (aucune création de fenêtre / démarrage à froid du bundle par ouverture), animations CSS, un seul process renderer, et coordonnées **client alignées 1:1** sur la fenêtre principale (`anchorRight`/`anchorBottom` utilisés tels quels, sans conversion écran). Ne pas revenir à une fenêtre par menu, ni à un popover DOM dans la fenêtre principale.
+
+**Click-through** : la fenêtre laisse passer la souris au repos (`setIgnoreMouseEvents(true, { forward: true })` côté Main). Le renderer fait un **hit-test** sur `mousemove` (les moves sont forwardés même en mode ignore) et demande la capture (`OVERLAY_SET_IGNORE` → `ignore=false`) uniquement au survol d'un panneau marqué `[data-overlay-hit]`, puis rend la main en dehors. La couche reste synchronisée en direct via le flux batché `tab:updated` relayé par le Main (`OverlayLayer.forward`). Les Contrôles du site (menu au clic) prennent le focus pour se fermer au clic extérieur (`blur`) ou sur Échap.
 
 ### État Renderer (`src/renderer/src/store/tabsStore.ts`)
 
