@@ -89,6 +89,13 @@ export const IPC = {
   TAB_RELOAD: 'tab:reload',
   VIEW_SET_SIDEBAR: 'view:setSidebar',
   SESSION_SAVE_UI: 'session:saveUi',
+  OPEN_EXTERNAL: 'app:openExternal',
+  CLIPBOARD_WRITE: 'app:clipboardWrite',
+  // Fenêtre-overlay native (flotte au-dessus de la WebContentsView sans la masquer)
+  OVERLAY_SITE_CONTROL: 'overlay:siteControl',
+  OVERLAY_GET_DATA: 'overlay:getData',
+  OVERLAY_RESIZE: 'overlay:resize',
+  OVERLAY_CLOSE: 'overlay:close',
   WINDOW_MINIMIZE: 'window:minimize',
   WINDOW_MAXIMIZE: 'window:maximize',
   WINDOW_CLOSE: 'window:close',
@@ -113,4 +120,16 @@ export interface CreateTabInput {
 /** État de la fenêtre remonté au Renderer (icône max/restore). */
 export interface WindowState {
   isMaximized: boolean
+}
+
+/**
+ * Données du "Site Control Center" transmises à la fenêtre-overlay native.
+ * `anchorRight`/`anchorBottom` sont en coordonnées client (relatives au contenu de la fenêtre
+ * principale) : le Main les convertit en coordonnées écran pour positionner l'overlay.
+ */
+export interface SiteControlPayload {
+  url: string
+  activeId: string | null
+  anchorRight: number
+  anchorBottom: number
 }

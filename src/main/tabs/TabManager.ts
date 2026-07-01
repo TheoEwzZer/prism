@@ -8,7 +8,10 @@ const HIBERNATE_AFTER_MS = 15 * 60 * 1000 // marque un onglet inactif comme éli
 const MAX_LIVE_VIEWS = 8 // cap strict de WebContentsView vivantes (LRU au-delà)
 const VIEW_INSET = 8 // marge autour de la vue (look "carte" arrondie façon Arc)
 const VIEW_RADIUS = 10
-const COLLAPSED_SIDEBAR_WIDTH = 48 // rail étroit quand la sidebar est repliée
+const COLLAPSED_SIDEBAR_WIDTH = 0 // repliée : la sidebar disparaît, la vue web occupe tout
+// Hauteur de la barre supérieure pleine largeur (doit rester synchronisée avec la classe
+// `h-11` de <TopBar> côté renderer). La vue web démarre sous cette barre.
+const TOPBAR_HEIGHT = 44
 
 interface TabEntry {
   meta: TabState
@@ -63,12 +66,12 @@ export class TabManager {
     const { width, height } = this.window.getContentBounds()
     const sidebar = this.sidebarCollapsed ? COLLAPSED_SIDEBAR_WIDTH : this.sidebarWidth
     const x = sidebar + VIEW_INSET
-    const y = VIEW_INSET
+    const y = TOPBAR_HEIGHT + VIEW_INSET
     return {
       x,
       y,
       width: Math.max(0, width - sidebar - VIEW_INSET * 2),
-      height: Math.max(0, height - VIEW_INSET * 2)
+      height: Math.max(0, height - TOPBAR_HEIGHT - VIEW_INSET * 2)
     }
   }
 

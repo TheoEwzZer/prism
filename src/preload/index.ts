@@ -8,7 +8,8 @@ import {
   type CreateTabInput,
   type SidebarIntent,
   type UiPersistState,
-  type WindowState
+  type WindowState,
+  type SiteControlPayload
 } from '@shared/types'
 
 /** Abonnement typé à un event Main -> Renderer ; retourne une fonction de désabonnement. */
@@ -35,6 +36,19 @@ const prism = {
   reload: (id: string): void => ipcRenderer.send(IPC.TAB_RELOAD, id),
   setSidebar: (intent: SidebarIntent): void => ipcRenderer.send(IPC.VIEW_SET_SIDEBAR, intent),
   saveUiState: (ui: UiPersistState): void => ipcRenderer.send(IPC.SESSION_SAVE_UI, ui),
+
+  // Utilitaires
+  openExternal: (url: string): void => ipcRenderer.send(IPC.OPEN_EXTERNAL, url),
+  copyText: (text: string): void => ipcRenderer.send(IPC.CLIPBOARD_WRITE, text),
+
+  // Fenêtre-overlay native "Site Control Center"
+  openSiteControl: (payload: SiteControlPayload): void =>
+    ipcRenderer.send(IPC.OVERLAY_SITE_CONTROL, payload),
+  getOverlayData: (): Promise<SiteControlPayload | null> =>
+    ipcRenderer.invoke(IPC.OVERLAY_GET_DATA),
+  resizeOverlay: (size: { width: number; height: number }): void =>
+    ipcRenderer.send(IPC.OVERLAY_RESIZE, size),
+  closeOverlay: (): void => ipcRenderer.send(IPC.OVERLAY_CLOSE),
 
   // Contrôles de fenêtre (frameless)
   minimizeWindow: (): void => ipcRenderer.send(IPC.WINDOW_MINIMIZE),

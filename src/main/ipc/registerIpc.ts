@@ -1,13 +1,15 @@
-import { ipcMain, type BrowserWindow } from 'electron'
+import { ipcMain, shell, clipboard, type BrowserWindow } from 'electron'
 import {
   IPC,
   type SessionData,
   type TabPatch,
   type CreateTabInput,
   type SidebarIntent,
-  type UiPersistState
+  type UiPersistState,
+  type SiteControlPayload
 } from '@shared/types'
 import { TabManager } from '../tabs/TabManager'
+import { SiteControlOverlay } from '../overlay/SiteControlOverlay'
 import { FrameCoalescer } from '../utils/scheduler'
 import { saveSession, flushSession } from '../persistence/sessionStore'
 
@@ -50,6 +52,7 @@ export function setupBrowser(window: BrowserWindow, initialSession: SessionData)
   }
 
   const tabManager = new TabManager(window, emitPatch)
+  const siteControl = new SiteControlOverlay(window)
 
   // Restauration lazy : on enregistre les metas (hibernées), sans créer de vue.
   for (const meta of initialSession.tabs) tabManager.registerTab(meta)
@@ -101,6 +104,21 @@ export function setupBrowser(window: BrowserWindow, initialSession: SessionData)
     tabManager.setSidebar(intent.width, intent.collapsed)
   })
 
+  ipcMain.on(IPC.OPEN_EXTERNAL, (_e, url: string) => {
+    if (/^https?:/.test(url)) shell.openExternal(url)
+  })
+  ipcMain.on(IPC.CLIPBOARD_WRITE, (_e, text: string) => clipboard.writeText(text))
+
+  // Fenêtre-overlay native "Site Control Center".
+  ipcMain.on(IPC.OVERLAY_SITE_CONTROL, (_e, payload: SiteControlPayload) =>
+    siteControl.open(payload)
+  )
+  ipcMain.handle(IPC.OVERLAY_GET_DATA, () => siteControl.getData())
+  ipcMain.on(IPC.OVERLAY_RESIZE, (_e, size: { width: number; height: number }) =>
+    siteControl.resize(size.width, size.height)
+  )
+  ipcMain.on(IPC.OVERLAY_CLOSE, () => siteControl.close())
+
   ipcMain.on(IPC.SESSION_SAVE_UI, (_e, ui: UiPersistState) => {
     session.order = ui.order
     session.folders = ui.folders
@@ -130,8 +148,11 @@ export function setupBrowser(window: BrowserWindow, initialSession: SessionData)
   const dispose = (): void => {
     patchCoalescer.dispose()
     tabManager.dispose()
+    siteControl.dispose()
     // Retrait des handlers pour éviter les doublons en cas de recréation de fenêtre.
-    for (const ch of [IPC.SESSION_GET, IPC.TAB_CREATE]) ipcMain.removeHandler(ch)
+    for (const ch of [IPC.SESSION_GET, IPC.TAB_CREATE, IPC.OVERLAY_GET_DATA]) {
+      ipcMain.removeHandler(ch)
+    }
     ipcMain.removeAllListeners(IPC.TAB_CLOSE)
     ipcMain.removeAllListeners(IPC.TAB_ACTIVATE)
     ipcMain.removeAllListeners(IPC.TAB_NAVIGATE)
@@ -139,6 +160,11 @@ export function setupBrowser(window: BrowserWindow, initialSession: SessionData)
     ipcMain.removeAllListeners(IPC.TAB_FORWARD)
     ipcMain.removeAllListeners(IPC.TAB_RELOAD)
     ipcMain.removeAllListeners(IPC.VIEW_SET_SIDEBAR)
+    ipcMain.removeAllListeners(IPC.OPEN_EXTERNAL)
+    ipcMain.removeAllListeners(IPC.CLIPBOARD_WRITE)
+    ipcMain.removeAllListeners(IPC.OVERLAY_SITE_CONTROL)
+    ipcMain.removeAllListeners(IPC.OVERLAY_RESIZE)
+    ipcMain.removeAllListeners(IPC.OVERLAY_CLOSE)
     ipcMain.removeAllListeners(IPC.SESSION_SAVE_UI)
     ipcMain.removeAllListeners(IPC.WINDOW_MINIMIZE)
     ipcMain.removeAllListeners(IPC.WINDOW_MAXIMIZE)

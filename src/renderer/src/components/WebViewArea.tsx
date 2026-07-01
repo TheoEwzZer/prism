@@ -13,7 +13,7 @@ export function WebViewArea(): React.JSX.Element {
   const hasActive = useTabsStore((s) => s.activeTabId !== null)
 
   return (
-    <main className="relative min-w-0 flex-1 bg-black">
+    <main className="relative min-w-0 flex-1 bg-sidebar">
       {!hasActive && (
         <div className="flex h-full flex-col items-center justify-center gap-3 text-slate-600">
           <Compass className="size-10" />
