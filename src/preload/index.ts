@@ -41,7 +41,7 @@ const prism = {
   openExternal: (url: string): void => ipcRenderer.send(IPC.OPEN_EXTERNAL, url),
   copyText: (text: string): void => ipcRenderer.send(IPC.CLIPBOARD_WRITE, text),
 
-  // Fenêtre-overlay native "Site Control Center"
+  // Fenêtre-overlay native « Contrôles du site »
   openSiteControl: (payload: SiteControlPayload): void =>
     ipcRenderer.send(IPC.OVERLAY_SITE_CONTROL, payload),
   getOverlayData: (): Promise<SiteControlPayload | null> =>

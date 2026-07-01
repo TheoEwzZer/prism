@@ -128,7 +128,7 @@ export interface WindowState {
 }
 
 /**
- * Données du "Site Control Center" transmises à la fenêtre-overlay native.
+ * Données des « Contrôles du site » transmises à la fenêtre-overlay native.
  * `anchorRight`/`anchorBottom` sont en coordonnées client (relatives au contenu de la fenêtre
  * principale) : le Main les convertit en coordonnées écran pour positionner l'overlay.
  */

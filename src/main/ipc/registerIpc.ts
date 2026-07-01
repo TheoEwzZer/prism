@@ -114,7 +114,7 @@ export function setupBrowser(window: BrowserWindow, initialSession: SessionData)
   })
   ipcMain.on(IPC.CLIPBOARD_WRITE, (_e, text: string) => clipboard.writeText(text))
 
-  // Fenêtre-overlay native "Site Control Center".
+  // Fenêtre-overlay native « Contrôles du site ».
   ipcMain.on(IPC.OVERLAY_SITE_CONTROL, (_e, payload: SiteControlPayload) =>
     siteControl.open(payload)
   )

@@ -4,7 +4,7 @@ import { cn } from '@/lib/utils'
 import type { SiteControlPayload } from '@shared/types'
 
 /**
- * Contenu du "Site Control Center", rendu dans la fenêtre-overlay native transparente.
+ * Contenu des « Contrôles du site », rendu dans la fenêtre-overlay native transparente.
  * Récupère ses données via IPC, s'auto-dimensionne à son contenu, et se ferme sur action
  * ou Échap (la perte de focus est gérée côté Main).
  */

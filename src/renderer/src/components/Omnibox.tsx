@@ -38,7 +38,7 @@ export function Omnibox(): React.JSX.Element {
     window.setTimeout(() => setCopied(false), 1200)
   }
 
-  // Ouvre le Site Control Center dans une fenêtre-overlay native (au-dessus de la page).
+  // Ouvre les « Contrôles du site » dans une fenêtre-overlay native (au-dessus de la page).
   const openSiteControl = (): void => {
     const el = scRef.current
     if (!el) return
@@ -75,11 +75,11 @@ export function Omnibox(): React.JSX.Element {
         className="h-7 rounded-md border-transparent bg-white/5 px-8 text-center text-sm text-slate-200 placeholder:text-slate-500 hover:bg-white/[0.07] focus-visible:border-white/10 focus-visible:bg-white/10 focus-visible:text-left focus-visible:ring-primary/30"
       />
 
-      {/* Bouton droite : Site Control Center (fenêtre-overlay native). */}
+      {/* Bouton droite : Contrôles du site (fenêtre-overlay native). */}
       <button
         ref={scRef}
-        aria-label="Site Control Center"
-        title="Site Control Center"
+        aria-label="Contrôles du site"
+        title="Contrôles du site"
         onClick={openSiteControl}
         className="absolute top-1/2 right-1 z-10 flex size-6 -translate-y-1/2 items-center justify-center rounded text-slate-400 transition-colors hover:bg-white/10 hover:text-white"
       >
