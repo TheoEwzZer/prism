@@ -10,6 +10,7 @@ import {
 } from '@shared/types'
 import { TabManager } from '../tabs/TabManager'
 import { SiteControlOverlay } from '../overlay/SiteControlOverlay'
+import { SidebarPeekOverlay } from '../overlay/SidebarPeekOverlay'
 import { FrameCoalescer } from '../utils/scheduler'
 import { saveSession, flushSession } from '../persistence/sessionStore'
 
@@ -40,7 +41,10 @@ export function setupBrowser(window: BrowserWindow, initialSession: SessionData)
     const patches = [...pending.entries()].map(([id, patch]) => ({ id, patch }))
     pending.clear()
     batchId += 1
-    window.webContents.send(IPC.TAB_UPDATED, { batchId, patches })
+    const batch = { batchId, patches }
+    window.webContents.send(IPC.TAB_UPDATED, batch)
+    // Le peek de la sidebar est une fenêtre séparée : on lui relaie le même flux batché.
+    sidebarPeek.forwardBatch(IPC.TAB_UPDATED, batch)
     persist()
   }
   const patchCoalescer = new FrameCoalescer(flushPatches, 16)
@@ -53,6 +57,7 @@ export function setupBrowser(window: BrowserWindow, initialSession: SessionData)
 
   const tabManager = new TabManager(window, emitPatch)
   const siteControl = new SiteControlOverlay(window)
+  const sidebarPeek = new SidebarPeekOverlay(window)
 
   // Restauration lazy : on enregistre les metas (hibernées), sans créer de vue.
   for (const meta of initialSession.tabs) tabManager.registerTab(meta)
@@ -119,6 +124,10 @@ export function setupBrowser(window: BrowserWindow, initialSession: SessionData)
   )
   ipcMain.on(IPC.OVERLAY_CLOSE, () => siteControl.close())
 
+  // Peek de la sidebar repliée (fenêtre-overlay flottant au-dessus de la page).
+  ipcMain.on(IPC.SIDEBAR_PEEK_OPEN, () => sidebarPeek.open(session.sidebarWidth))
+  ipcMain.on(IPC.SIDEBAR_PEEK_CLOSE, () => sidebarPeek.close())
+
   ipcMain.on(IPC.SESSION_SAVE_UI, (_e, ui: UiPersistState) => {
     session.order = ui.order
     session.folders = ui.folders
@@ -145,10 +154,18 @@ export function setupBrowser(window: BrowserWindow, initialSession: SessionData)
   window.on('maximize', sendWindowState)
   window.on('unmaximize', sendWindowState)
 
+  // Garde l'overlay de peek aligné sur la fenêtre principale s'il est ouvert.
+  const repositionPeek = (): void => sidebarPeek.reposition()
+  window.on('resize', repositionPeek)
+  window.on('move', repositionPeek)
+  window.on('maximize', repositionPeek)
+  window.on('unmaximize', repositionPeek)
+
   const dispose = (): void => {
     patchCoalescer.dispose()
     tabManager.dispose()
     siteControl.dispose()
+    sidebarPeek.dispose()
     // Retrait des handlers pour éviter les doublons en cas de recréation de fenêtre.
     for (const ch of [IPC.SESSION_GET, IPC.TAB_CREATE, IPC.OVERLAY_GET_DATA]) {
       ipcMain.removeHandler(ch)
@@ -165,6 +182,8 @@ export function setupBrowser(window: BrowserWindow, initialSession: SessionData)
     ipcMain.removeAllListeners(IPC.OVERLAY_SITE_CONTROL)
     ipcMain.removeAllListeners(IPC.OVERLAY_RESIZE)
     ipcMain.removeAllListeners(IPC.OVERLAY_CLOSE)
+    ipcMain.removeAllListeners(IPC.SIDEBAR_PEEK_OPEN)
+    ipcMain.removeAllListeners(IPC.SIDEBAR_PEEK_CLOSE)
     ipcMain.removeAllListeners(IPC.SESSION_SAVE_UI)
     ipcMain.removeAllListeners(IPC.WINDOW_MINIMIZE)
     ipcMain.removeAllListeners(IPC.WINDOW_MAXIMIZE)

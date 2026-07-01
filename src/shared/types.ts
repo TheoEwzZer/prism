@@ -96,10 +96,15 @@ export const IPC = {
   OVERLAY_GET_DATA: 'overlay:getData',
   OVERLAY_RESIZE: 'overlay:resize',
   OVERLAY_CLOSE: 'overlay:close',
+  // Peek de la sidebar repliée : fenêtre-overlay native qui flotte AU-DESSUS de la page
+  // (façon Arc), révélée au survol du bord gauche. Elle ne pousse jamais la vue web.
+  SIDEBAR_PEEK_OPEN: 'sidebar:peekOpen', // main -> Main (survol du bord gauche)
+  SIDEBAR_PEEK_CLOSE: 'sidebar:peekClose', // overlay -> Main (souris sortie du panneau)
   WINDOW_MINIMIZE: 'window:minimize',
   WINDOW_MAXIMIZE: 'window:maximize',
   WINDOW_CLOSE: 'window:close',
   // Main -> Renderer (events)
+  SIDEBAR_PEEK_STATE: 'sidebar:peekState', // Main -> overlay (ouverture/fermeture animée)
   TAB_UPDATED: 'tab:updated',
   TAB_CREATED: 'tab:created',
   TAB_CLOSED: 'tab:closed',

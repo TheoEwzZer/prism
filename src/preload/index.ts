@@ -50,6 +50,12 @@ const prism = {
     ipcRenderer.send(IPC.OVERLAY_RESIZE, size),
   closeOverlay: (): void => ipcRenderer.send(IPC.OVERLAY_CLOSE),
 
+  // Peek de la sidebar repliée (fenêtre-overlay flottant au-dessus de la page)
+  openSidebarPeek: (): void => ipcRenderer.send(IPC.SIDEBAR_PEEK_OPEN),
+  closeSidebarPeek: (): void => ipcRenderer.send(IPC.SIDEBAR_PEEK_CLOSE),
+  onSidebarPeekState: (cb: (state: { open: boolean }) => void): (() => void) =>
+    subscribe(IPC.SIDEBAR_PEEK_STATE, cb),
+
   // Contrôles de fenêtre (frameless)
   minimizeWindow: (): void => ipcRenderer.send(IPC.WINDOW_MINIMIZE),
   toggleMaximizeWindow: (): void => ipcRenderer.send(IPC.WINDOW_MAXIMIZE),

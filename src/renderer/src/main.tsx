@@ -4,6 +4,7 @@ import { StrictMode, type ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
 import App from './App'
 import { SiteControlOverlay } from './overlay/SiteControlOverlay'
+import { SidebarPeekOverlay } from './overlay/SidebarPeekOverlay'
 
 const root = createRoot(document.getElementById('root')!)
 
@@ -26,6 +27,8 @@ function renderOverlay(name: string): ReactNode {
   switch (name) {
     case 'siteControl':
       return <SiteControlOverlay />
+    case 'sidebarPeek':
+      return <SidebarPeekOverlay />
     default:
       return null
   }
