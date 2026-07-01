@@ -114,7 +114,7 @@ export function setupBrowser(window: BrowserWindow, initialSession: SessionData)
 
   // Couche d'overlay unique (au-dessus de la page).
   ipcMain.on(IPC.OVERLAY_SITE_CONTROL, (_e, payload: SiteControlPayload) =>
-    overlay.showSiteControl(payload)
+    overlay.toggleSiteControl(payload)
   )
   ipcMain.on(IPC.OVERLAY_CLOSE, () => overlay.hideSiteControl())
   ipcMain.on(IPC.OVERLAY_SET_IGNORE, (_e, ignore: boolean) => overlay.setIgnore(ignore))

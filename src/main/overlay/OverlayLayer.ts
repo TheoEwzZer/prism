@@ -23,6 +23,7 @@ export class OverlayLayer {
   private ready = false
   private siteControl: SiteControlPayload | null = null
   private peekOpen = false
+  private lastHideAt = 0
 
   private readonly track = (): void => this.applyBounds()
 
@@ -37,7 +38,17 @@ export class OverlayLayer {
 
   // --- Commandes depuis la fenêtre principale ---
 
-  showSiteControl(payload: SiteControlPayload): void {
+  /**
+   * Clic sur le bouton ancre : bascule le popover. Ouvert → on ferme. Fermé → on ouvre, SAUF
+   * si une fermeture vient d'avoir lieu (< 250 ms) : dans ce cas le clic sur le bouton a lui-même
+   * provoqué le `blur` qui a fermé le popover, donc on ne le rouvre pas (vrai toggle).
+   */
+  toggleSiteControl(payload: SiteControlPayload): void {
+    if (this.siteControl !== null) {
+      this.hideSiteControl()
+      return
+    }
+    if (Date.now() - this.lastHideAt < 250) return
     this.siteControl = payload
     const win = this.ensureWindow()
     // Menu au clic : on prend le focus pour pouvoir se fermer au clic extérieur (blur) et gérer
@@ -47,7 +58,9 @@ export class OverlayLayer {
   }
 
   hideSiteControl(): void {
+    if (this.siteControl === null) return
     this.siteControl = null
+    this.lastHideAt = Date.now()
     this.send(IPC.OVERLAY_SITE_CONTROL_DATA, null)
   }
 
