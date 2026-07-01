@@ -125,12 +125,14 @@ function IconButton({
   children,
   label,
   onClick,
-  disabled
+  disabled,
+  active
 }: {
   children: React.ReactNode
   label: string
   onClick?: () => void
   disabled?: boolean
+  active?: boolean
 }): React.JSX.Element {
   return (
     <button
@@ -139,8 +141,10 @@ function IconButton({
       onClick={onClick}
       disabled={disabled}
       className={cn(
-        'flex size-7 items-center justify-center rounded-md text-slate-400 transition-colors',
-        'hover:bg-white/10 hover:text-white',
+        'flex size-7 items-center justify-center rounded-md transition-colors',
+        active
+          ? 'bg-primary/20 text-primary hover:bg-primary/30'
+          : 'text-slate-400 hover:bg-white/10 hover:text-white',
         'disabled:pointer-events-none disabled:opacity-30'
       )}
     >

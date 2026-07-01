@@ -32,7 +32,7 @@ export class TabManager {
 
   private sidebarWidth = 256
   private sidebarCollapsed = false
-  private lastBounds: Rectangle | null = null
+  private lastLayoutSig: string | null = null
 
   private readonly boundsCoalescer: FrameCoalescer
   private hibernationTimer: ReturnType<typeof setInterval> | null = null
@@ -62,6 +62,7 @@ export class TabManager {
     this.boundsCoalescer.schedule()
   }
 
+  /** Aire de base disponible pour la vue web (sous la top bar, à droite de la sidebar). */
   private computeBounds(): Rectangle {
     const { width, height } = this.window.getContentBounds()
     const sidebar = this.sidebarCollapsed ? COLLAPSED_SIDEBAR_WIDTH : this.sidebarWidth
@@ -77,16 +78,9 @@ export class TabManager {
 
   private applyBoundsNow(): void {
     const b = this.computeBounds()
-    if (
-      this.lastBounds &&
-      this.lastBounds.x === b.x &&
-      this.lastBounds.y === b.y &&
-      this.lastBounds.width === b.width &&
-      this.lastBounds.height === b.height
-    ) {
-      return // rien n'a changé : pas de setBounds inutile
-    }
-    this.lastBounds = b
+    const sig = JSON.stringify({ b, active: this.activeTabId })
+    if (sig === this.lastLayoutSig) return // rien n'a changé : pas de setBounds inutile
+    this.lastLayoutSig = sig
     const entry = this.activeTabId ? this.tabs.get(this.activeTabId) : null
     entry?.view?.setBounds(b)
   }
@@ -173,6 +167,15 @@ export class TabManager {
       if (!/^(https?|about):/.test(url)) event.preventDefault()
     })
 
+    // F12 / Ctrl+Shift+I → notre DevTools docké géré (et on empêche le DevTools natif docké
+    // de Chromium, qui se superposerait à la page dans notre layout custom).
+    wc.on('before-input-event', (event, input) => {
+      if (isDevToolsShortcut(input)) {
+        event.preventDefault()
+        this.toggleDevTools()
+      }
+    })
+
     wc.on('page-title-updated', (_e, title) => this.emitPatch(id, { title }))
     wc.on('page-favicon-updated', (_e, favicons) => {
       this.emitPatch(id, { favicon: favicons[0] ?? null })
@@ -208,12 +211,13 @@ export class TabManager {
     const entry = this.tabs.get(id)
     if (!entry) return
 
-    // Masquer l'ancienne vue active. `WebContents` n'expose pas `blur()` : focus() sur la
-    // nouvelle vue (plus bas) retire implicitement le focus de l'ancienne, et setVisible(false)
-    // la sort du rendu.
+    // Masquer l'ancienne vue active (+ fermer son DevTools natif s'il était ouvert).
+    // `WebContents` n'expose pas `blur()` : focus() sur la nouvelle vue (plus bas) retire
+    // implicitement le focus de l'ancienne, et setVisible(false) la sort du rendu.
     if (this.activeTabId && this.activeTabId !== id) {
       const prev = this.tabs.get(this.activeTabId)
       if (prev?.view && !prev.view.webContents.isDestroyed()) {
+        if (prev.view.webContents.isDevToolsOpened()) prev.view.webContents.closeDevTools()
         prev.view.setVisible(false)
       }
     }
@@ -224,8 +228,7 @@ export class TabManager {
 
     if (view && !view.webContents.isDestroyed()) {
       // Le Main applique les bounds (source de vérité) avant d'afficher.
-      view.setBounds(this.computeBounds())
-      this.lastBounds = this.computeBounds()
+      this.applyBoundsNow()
       view.setVisible(true)
       view.webContents.focus()
     }
@@ -240,6 +243,22 @@ export class TabManager {
     this.destroyView(entry)
     this.tabs.delete(id)
     if (this.activeTabId === id) this.activeTabId = null
+  }
+
+  // ---------------------------------------------------------------------------
+  // DevTools (natif Electron — comme un vrai navigateur)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Ouvre/ferme le DevTools NATIF de la page active. Chromium gère lui-même la barre
+   * d'outils complète (dont le bouton fermer), le dock et le redimensionnement fluide.
+   * On ne bricole plus de vue/splitter/instantanés.
+   */
+  toggleDevTools(): void {
+    const wc = this.activeTabId ? this.tabs.get(this.activeTabId)?.view?.webContents : null
+    if (!wc || wc.isDestroyed()) return
+    if (wc.isDevToolsOpened()) wc.closeDevTools()
+    else wc.openDevTools({ mode: 'right' })
   }
 
   navigate(id: string, input: string): void {
@@ -345,6 +364,13 @@ export class TabManager {
     for (const entry of this.tabs.values()) this.destroyView(entry)
     this.tabs.clear()
   }
+}
+
+/** Détecte F12 ou Ctrl+Shift+I (keydown) pour (dé)basculer le DevTools. */
+function isDevToolsShortcut(input: Electron.Input): boolean {
+  if (input.type !== 'keyDown') return false
+  if (input.key === 'F12') return true
+  return input.control && input.shift && input.key.toLowerCase() === 'i'
 }
 
 /**
