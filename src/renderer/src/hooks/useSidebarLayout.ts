@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef } from 'react'
 import { useTabsStore } from '@/store/tabsStore'
 
 /** Doit rester synchronisé avec la `duration-200` de l'animation de <Sidebar>. */
@@ -13,38 +13,38 @@ const SIDEBAR_ANIM_MS = 200
  * au repli on retarde le `collapsed` réel jusqu'à la fin de l'animation, sinon la vue web
  * s'étendrait par-dessus la sidebar encore visible en train de se refermer.
  *
- * Throttle via requestAnimationFrame + cache de la dernière valeur envoyée → aucune émission
- * redondante.
+ * Purement impératif (émission IPC, aucun état React) → aucun rendu, et `lastSent` évite toute
+ * émission redondante.
  */
 export function useSidebarLayout(): void {
   const collapsed = useTabsStore((s) => s.sidebarCollapsed)
   const width = useTabsStore((s) => s.sidebarWidth)
 
-  // `collapsed` effectif transmis au Main, décalé à la fermeture.
-  const [layoutCollapsed, setLayoutCollapsed] = useState(collapsed)
-  useEffect(() => {
-    if (!collapsed) {
-      setLayoutCollapsed(false) // ouverture : la vue web se rétracte tout de suite
-      return
-    }
-    const t = setTimeout(() => setLayoutCollapsed(true), SIDEBAR_ANIM_MS)
-    return () => clearTimeout(t)
-  }, [collapsed])
-
-  const rafId = useRef<number | null>(null)
   const lastSent = useRef<{ width: number; collapsed: boolean } | null>(null)
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
-    if (rafId.current !== null) cancelAnimationFrame(rafId.current)
-    rafId.current = requestAnimationFrame(() => {
-      rafId.current = null
+    const emit = (c: boolean): void => {
       const prev = lastSent.current
-      if (prev && prev.width === width && prev.collapsed === layoutCollapsed) return
-      lastSent.current = { width, collapsed: layoutCollapsed }
-      window.prism.setSidebar({ width, collapsed: layoutCollapsed })
-    })
-    return () => {
-      if (rafId.current !== null) cancelAnimationFrame(rafId.current)
+      if (prev && prev.width === width && prev.collapsed === c) return
+      lastSent.current = { width, collapsed: c }
+      window.prism.setSidebar({ width, collapsed: c })
     }
-  }, [layoutCollapsed, width])
+
+    if (timer.current) {
+      clearTimeout(timer.current)
+      timer.current = null
+    }
+
+    if (!collapsed) {
+      emit(false) // ouverture : la vue web se rétracte tout de suite
+    } else {
+      // repli : on garde la vue étendue pendant l'animation, puis on replie réellement.
+      timer.current = setTimeout(() => emit(true), SIDEBAR_ANIM_MS)
+    }
+
+    return () => {
+      if (timer.current) clearTimeout(timer.current)
+    }
+  }, [collapsed, width])
 }
