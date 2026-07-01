@@ -1,25 +1,34 @@
 import { useTabsStore } from '@/store/tabsStore'
+import { cn } from '@/lib/utils'
 import { PinnedApps } from './PinnedApps'
 import { TabList } from './TabList'
 
 /**
  * Barre latérale gauche (style Arc). La navigation (paramètres, toggle, back/forward/reload,
  * URL) vit dans la <TopBar> pleine largeur. La sidebar ne contient que les favoris et la
- * liste d'onglets. Repliée, elle disparaît complètement (la vue web occupe toute la largeur).
+ * liste d'onglets.
+ *
+ * Ouverture/repli animés : l'aside anime sa largeur (0 ↔ width) ; le contenu est à largeur
+ * FIXE et simplement clippé (`overflow-hidden`) → aucun reflow pendant l'animation. Le repli
+ * réel de la vue web native est décalé à la fin de l'animation côté `useSidebarLayout` pour
+ * qu'elle n'occulte pas la sidebar en train de se refermer.
  */
-export function Sidebar(): React.JSX.Element | null {
+export function Sidebar(): React.JSX.Element {
   const collapsed = useTabsStore((s) => s.sidebarCollapsed)
   const width = useTabsStore((s) => s.sidebarWidth)
 
-  if (collapsed) return null
-
   return (
     <aside
-      style={{ width }}
-      className="flex h-full shrink-0 flex-col bg-sidebar pt-2 text-sidebar-foreground"
+      style={{ width: collapsed ? 0 : width }}
+      className={cn(
+        'h-full shrink-0 overflow-hidden bg-sidebar',
+        'transition-[width] duration-200 ease-out'
+      )}
     >
-      <PinnedApps />
-      <TabList />
+      <div style={{ width }} className="flex h-full min-w-0 flex-col pt-2 text-sidebar-foreground">
+        <PinnedApps />
+        <TabList />
+      </div>
     </aside>
   )
 }
