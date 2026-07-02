@@ -49,24 +49,25 @@ export function Omnibox(): React.JSX.Element {
   }
 
   return (
-    <div className="relative">
+    <div className="flex items-center gap-0.5">
       {/* Bouton gauche : copier l'URL. */}
       <button
         aria-label="Copier l'adresse"
         title="Copier l'adresse"
         onClick={copyUrl}
         disabled={!activeUrl}
-        className="absolute top-1/2 left-1 z-10 flex size-6 -translate-y-1/2 items-center justify-center rounded text-slate-400 transition-colors hover:bg-white/10 hover:text-white disabled:pointer-events-none disabled:opacity-40"
+        className="flex size-6 shrink-0 items-center justify-center rounded text-slate-400 transition-colors hover:bg-white/10 hover:text-white disabled:pointer-events-none disabled:opacity-40"
       >
         {copied ? <Check className="size-3.5 text-emerald-400" /> : <Copy className="size-3.5" />}
       </button>
 
-      {/* Zone URL cliquable (ouvre la palette). */}
+      {/* Zone URL cliquable (ouvre la palette). La pilule s'ajuste à son contenu (max-w) pour
+          que les boutons restent collés au texte. */}
       <button
         onClick={openPalette}
         title="Rechercher ou saisir une URL"
         className={cn(
-          'flex h-7 w-full items-center justify-center rounded-md border border-transparent px-8',
+          'flex h-7 min-w-0 max-w-[360px] items-center justify-center rounded-md border border-transparent px-3',
           'bg-white/5 text-sm transition-colors hover:bg-white/[0.07]',
           display ? 'text-slate-200' : 'text-slate-500'
         )}
@@ -80,7 +81,7 @@ export function Omnibox(): React.JSX.Element {
         aria-label="Contrôles du site"
         title="Contrôles du site"
         onClick={openSiteControl}
-        className="absolute top-1/2 right-1 z-10 flex size-6 -translate-y-1/2 items-center justify-center rounded text-slate-400 transition-colors hover:bg-white/10 hover:text-white"
+        className="flex size-6 shrink-0 items-center justify-center rounded text-slate-400 transition-colors hover:bg-white/10 hover:text-white"
       >
         <SlidersHorizontal className="size-3.5" />
       </button>

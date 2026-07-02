@@ -49,6 +49,14 @@ export function TopBar(): React.JSX.Element {
 
   return (
     <div className="app-drag relative flex h-8 shrink-0 items-center border-b border-white/5 bg-sidebar">
+      {/* Omnibox centrée sur la largeur totale de la fenêtre (pas sur la zone web), pour rester
+          visuellement au milieu quelle que soit la largeur de la sidebar. */}
+      <div className="pointer-events-none absolute inset-x-0 flex justify-center">
+        <div className="app-no-drag pointer-events-auto flex max-w-[60%] justify-center">
+          <Omnibox />
+        </div>
+      </div>
+
       {/* Zone gauche. Ouverte : largeur = sidebar, nav collée au bord droit. Repliée : cluster
           compact auto (pas d'espace vide), avec la nav toujours visible. */}
       {collapsed ? (
@@ -80,12 +88,7 @@ export function TopBar(): React.JSX.Element {
       {/* Zone droite — au-dessus de la zone web : URL centrée. Les boutons min/agrandir/fermer
           sont dessinés nativement par Windows (Window Controls Overlay, cf. index.ts) dans le
           coin haut-droit → ils déclenchent les Snap Layouts. On réserve leur largeur à droite. */}
-      <div className="relative flex h-full flex-1 items-center px-2">
-        {/* Omnibox centrée sur la zone web. */}
-        <div className="app-no-drag absolute left-1/2 w-[420px] max-w-[42%] -translate-x-1/2">
-          <Omnibox />
-        </div>
-      </div>
+      <div className="pointer-events-none relative flex h-full flex-1 items-center px-2" />
     </div>
   )
 }
