@@ -116,6 +116,7 @@ export const IPC = {
   OVERLAY_SITE_CONTROL_DATA: 'overlay:siteControlData', // Main -> overlay : push données (ou null)
   OVERLAY_COMMAND_DATA: 'overlay:commandData', // Main -> overlay : ouvrir/fermer la palette (ou null)
   SIDEBAR_PEEK_STATE: 'sidebar:peekState', // Main -> overlay : ouverture/fermeture animée
+  SIDEBAR_TOGGLE_MASK: 'sidebar:toggleMask', // Main -> overlay : masque animé du repli/dépli sidebar
   UI_STATE_SYNC: 'ui:stateSync', // Main -> autres fenêtres : convergence de l'état organisationnel
   TAB_UPDATED: 'tab:updated',
   TAB_CREATED: 'tab:created',
@@ -156,6 +157,21 @@ export interface SidebarPeekState {
   open: boolean
   /** Largeur courante de la sidebar (px) pour dimensionner le panneau. */
   width: number
+}
+
+/**
+ * Masque animé du repli/dépli de la sidebar, poussé du Main vers la couche d'overlay. La vraie vue
+ * web + la vraie sidebar DOM se calent INSTANTANÉMENT à leur état final ; toute l'animation vit dans
+ * ce masque (copie de la sidebar) qui anime sa largeur en CSS/GPU par-dessus la vue native — fluide,
+ * impossible à obtenir en repositionnant la vue native frame par frame. Repli = plein → 0 ; dépli =
+ * 0 → plein (miroir exact).
+ */
+export interface SidebarToggleMaskState {
+  visible: boolean
+  /** Largeur cible à pleine ouverture (= largeur de la sidebar). */
+  width: number
+  /** Cible de l'animation : `true` = pleine largeur (dépli) ; `false` = 0 (repli). */
+  expanded: boolean
 }
 
 /** Contexte d'ouverture de la palette de commande (façon Arc). */

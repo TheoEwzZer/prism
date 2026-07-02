@@ -2,8 +2,14 @@ import { useEffect, useRef, useState } from 'react'
 import { useTabsStore } from '@/store/tabsStore'
 import { useTabEvents } from '@/hooks/useTabEvents'
 import { usePersistUiState } from '@/hooks/useSession'
-import type { SiteControlPayload, SidebarPeekState, CommandPalettePayload } from '@shared/types'
+import type {
+  SiteControlPayload,
+  SidebarPeekState,
+  SidebarToggleMaskState,
+  CommandPalettePayload
+} from '@shared/types'
 import { PeekSidebar } from './PeekSidebar'
+import { SidebarToggleMask } from './SidebarToggleMask'
 import { SiteControlPopover } from './SiteControlPopover'
 import { CommandPalette } from './CommandPalette'
 
@@ -23,6 +29,11 @@ export function OverlayLayer(): React.JSX.Element {
   const hydrate = useTabsStore((s) => s.hydrate)
   const [ready, setReady] = useState(false)
   const [peek, setPeek] = useState<SidebarPeekState>({ open: false, width: 256 })
+  const [toggleMask, setToggleMask] = useState<SidebarToggleMaskState>({
+    visible: false,
+    width: 256,
+    expanded: true
+  })
   const [site, setSite] = useState<SiteControlPayload | null>(null)
   const [command, setCommand] = useState<CommandPalettePayload | null>(null)
 
@@ -38,6 +49,7 @@ export function OverlayLayer(): React.JSX.Element {
   }, [hydrate])
 
   useEffect(() => window.prism.onSidebarPeekState(setPeek), [])
+  useEffect(() => window.prism.onSidebarToggleMask(setToggleMask), [])
   useEffect(() => window.prism.onSiteControlData(setSite), [])
   useEffect(() => window.prism.onCommandData(setCommand), [])
 
@@ -152,6 +164,7 @@ export function OverlayLayer(): React.JSX.Element {
   return (
     <div className="pointer-events-none fixed inset-0 overflow-hidden">
       <PeekSidebar open={peek.open} width={peek.width} />
+      <SidebarToggleMask state={toggleMask} />
       {site && <SiteControlPopover data={site} />}
       {command && <CommandPalette data={command} />}
     </div>

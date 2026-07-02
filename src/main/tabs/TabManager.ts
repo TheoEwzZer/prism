@@ -8,7 +8,6 @@ const HIBERNATE_AFTER_MS = 15 * 60 * 1000 // marque un onglet inactif comme éli
 const MAX_LIVE_VIEWS = 8 // cap strict de WebContentsView vivantes (LRU au-delà)
 const VIEW_INSET = 8 // marge autour de la vue (look "carte" arrondie façon Arc)
 const VIEW_RADIUS = 10
-const COLLAPSED_SIDEBAR_WIDTH = 0 // repliée : la sidebar disparaît, la vue web occupe tout
 // Hauteur de la barre supérieure pleine largeur (doit rester synchronisée avec la classe
 // `h-8` de <TopBar> côté renderer). La vue web démarre juste sous cette barre : la barre
 // englobe déjà la marge haute de la carte, donc pas de VIEW_INSET supplémentaire en haut.
@@ -39,8 +38,8 @@ export class TabManager {
   private readonly tabs = new Map<string, TabEntry>()
   private activeTabId: string | null = null
 
-  private sidebarWidth = 256
-  private sidebarCollapsed = false
+  // Largeur de sidebar *effective* utilisée pour le layout de la vue web (0 si repliée).
+  private effectiveSidebar = 256
   private lastLayoutSig: string | null = null
 
   private readonly boundsCoalescer: FrameCoalescer
@@ -70,15 +69,14 @@ export class TabManager {
 
   /** Intention de layout venant du Renderer (jamais de pixels bruts). */
   setSidebar(width: number, collapsed: boolean): void {
-    this.sidebarWidth = Math.max(0, Math.round(width))
-    this.sidebarCollapsed = collapsed
+    this.effectiveSidebar = collapsed ? 0 : Math.max(0, Math.round(width))
     this.boundsCoalescer.schedule()
   }
 
   /** Aire de base disponible pour la vue web (sous la top bar, à droite de la sidebar). */
   private computeBounds(): Rectangle {
     const { width, height } = this.window.getContentBounds()
-    const sidebar = this.sidebarCollapsed ? COLLAPSED_SIDEBAR_WIDTH : this.sidebarWidth
+    const sidebar = this.effectiveSidebar
     const x = sidebar + VIEW_INSET
     const y = TOPBAR_HEIGHT
     return {

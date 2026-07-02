@@ -3,6 +3,11 @@ import { join } from 'path'
 import { is } from '@electron-toolkit/utils'
 import { IPC, type SiteControlPayload, type CommandPalettePayload } from '@shared/types'
 
+/** Durée de l'animation de repli/dépli (doit rester synchro avec la transition CSS du masque). */
+const SIDEBAR_TOGGLE_MS = 200
+/** Délai laissé à l'overlay pour peindre l'état initial du masque avant de lancer la transition. */
+const MASK_PAINT_MS = 32
+
 /**
  * Couche d'overlay UNIQUE (approche B). Une seule fenêtre transparente, sans cadre,
  * always-on-top, **persistante**, qui recouvre exactement la zone contenu de la fenêtre
@@ -29,6 +34,8 @@ export class OverlayLayer {
   // déborder à `width: 0`.
   private peekWidth = 256
   private lastHideAt = 0
+  // Timers de l'animation de toggle en cours (pour l'annuler si l'utilisateur re-bascule entre-temps).
+  private toggleMaskTimers: ReturnType<typeof setTimeout>[] = []
 
   private readonly track = (): void => this.applyBounds()
 
@@ -103,6 +110,59 @@ export class OverlayLayer {
     this.peekOpen = false
     // On garde `peekWidth` : indispensable au slide-out hors écran (cf. commentaire du champ).
     this.send(IPC.SIDEBAR_PEEK_STATE, { open: false, width: this.peekWidth })
+  }
+
+  /**
+   * Repli/dépli fluide de la sidebar. La vue web native ne peut pas s'animer sans saccade ; on la
+   * cale donc INSTANTANÉMENT à son état final (via `snap`) et on joue l'animation dans l'overlay :
+   * un masque (copie de la sidebar) anime sa largeur en CSS/GPU par-dessus la vue native.
+   *
+   * - Repli (`expand=false`) : masque affiché pleine largeur (identique à la vraie sidebar → échange
+   *   invisible), puis après une frame on cale la vue à gauche et on rétrécit le masque → 0.
+   * - Dépli (`expand=true`) : on cale la vue à droite tout de suite (la zone sidebar devient vide),
+   *   masque monté à 0, puis après une frame on le fait grandir → pleine largeur.
+   *
+   * Dans les deux cas la vraie sidebar DOM est instantanée (masquée), le masque porte l'animation.
+   */
+  playSidebarToggle(width: number, expand: boolean, snap: () => void): void {
+    this.cancelSidebarToggle()
+    if (expand) {
+      snap() // vue calée à droite immédiatement : la zone [0,width] devient vide, le masque y grandit
+      this.send(IPC.SIDEBAR_TOGGLE_MASK, { visible: true, width, expanded: false })
+      this.toggleMaskTimers.push(
+        setTimeout(() => {
+          this.send(IPC.SIDEBAR_TOGGLE_MASK, { visible: true, width, expanded: true })
+        }, MASK_PAINT_MS)
+      )
+    } else {
+      this.send(IPC.SIDEBAR_TOGGLE_MASK, { visible: true, width, expanded: true })
+      this.toggleMaskTimers.push(
+        setTimeout(() => {
+          snap() // vue calée à gauche sous le masque plein
+          this.send(IPC.SIDEBAR_TOGGLE_MASK, { visible: true, width, expanded: false })
+        }, MASK_PAINT_MS)
+      )
+    }
+    this.toggleMaskTimers.push(
+      setTimeout(
+        () => {
+          this.send(IPC.SIDEBAR_TOGGLE_MASK, { visible: false, width, expanded: expand })
+        },
+        MASK_PAINT_MS + SIDEBAR_TOGGLE_MS + 40
+      )
+    )
+  }
+
+  /**
+   * Annule une animation de toggle en cours et retire le masque (appelé quand la sidebar est
+   * re-basculée / redimensionnée entre-temps, pour éviter qu'un `snap` différé ne s'applique après
+   * coup).
+   */
+  cancelSidebarToggle(): void {
+    if (this.toggleMaskTimers.length === 0) return
+    for (const t of this.toggleMaskTimers) clearTimeout(t)
+    this.toggleMaskTimers = []
+    this.send(IPC.SIDEBAR_TOGGLE_MASK, { visible: false, width: this.peekWidth, expanded: true })
   }
 
   /** Bascule le click-through demandé par le renderer (hit-test des panneaux). */

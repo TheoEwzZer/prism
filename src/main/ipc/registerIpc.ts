@@ -232,9 +232,20 @@ export function setupBrowser(window: BrowserWindow, initialSession: SessionData)
   ipcMain.on(IPC.TAB_RELOAD, (_e, id: string) => tabManager.reload(id))
 
   ipcMain.on(IPC.VIEW_SET_SIDEBAR, (_e, intent: SidebarIntent) => {
+    // Toggle repli/dépli : on joue l'animation fluide via l'overlay (masque CSS) tandis que la vue
+    // web est calée INSTANTANÉMENT à son état final sous le masque. Un simple resize (collapsed
+    // inchangé, ex. drag de la poignée) est appliqué directement, sans animation.
+    const toggled = session.sidebarCollapsed !== intent.collapsed
     session.sidebarWidth = intent.width
     session.sidebarCollapsed = intent.collapsed
-    tabManager.setSidebar(intent.width, intent.collapsed)
+    if (toggled) {
+      overlay.playSidebarToggle(intent.width, !intent.collapsed, () =>
+        tabManager.setSidebar(intent.width, intent.collapsed)
+      )
+    } else {
+      overlay.cancelSidebarToggle() // annule un toggle en cours (re-bascule / resize rapide)
+      tabManager.setSidebar(intent.width, intent.collapsed)
+    }
   })
 
   ipcMain.on(IPC.OPEN_EXTERNAL, (_e, url: string) => {

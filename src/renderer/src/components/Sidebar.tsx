@@ -1,5 +1,5 @@
+import { useEffect, useState } from 'react'
 import { useTabsStore } from '@/store/tabsStore'
-import { cn } from '@/lib/utils'
 import { SidebarTabs } from './SidebarTabs'
 
 /**
@@ -7,22 +7,31 @@ import { SidebarTabs } from './SidebarTabs'
  * URL) vit dans la <TopBar> pleine largeur. La sidebar ne contient que les favoris et la
  * liste d'onglets.
  *
- * Ouverture/repli animés : l'aside anime sa largeur (0 ↔ width) ; le contenu est à largeur
- * FIXE et simplement clippé (`overflow-hidden`) → aucun reflow pendant l'animation. Le repli
- * réel de la vue web native est décalé à la fin de l'animation côté `useSidebarLayout` pour
- * qu'elle n'occulte pas la sidebar en train de se refermer.
+ * Animation du toggle : elle NE vit PAS ici. Le repli/dépli fluide est joué par un masque CSS
+ * dans la couche d'overlay (au-dessus de la vue web native), piloté par le Main. Cette vraie
+ * sidebar est donc INSTANTANÉE : elle bascule sèchement 0 ↔ width, mais on RETARDE ce basculement
+ * (`visualCollapsed`) jusqu'à la fin de l'animation du masque, qui la recouvre entièrement pendant
+ * ce temps → le basculement instantané est invisible. (Un simple resize de la poignée, `collapsed`
+ * inchangé, suit la largeur en direct.)
  */
+const TOGGLE_MASK_MS = 250
+
 export function Sidebar(): React.JSX.Element {
   const collapsed = useTabsStore((s) => s.sidebarCollapsed)
   const width = useTabsStore((s) => s.sidebarWidth)
 
+  // `visualCollapsed` retarde `collapsed` : la vraie sidebar ne bascule qu'à la fin de l'animation
+  // du masque overlay (qui la recouvre), pour un basculement instantané mais invisible.
+  const [visualCollapsed, setVisualCollapsed] = useState(collapsed)
+  useEffect(() => {
+    const t = setTimeout(() => setVisualCollapsed(collapsed), TOGGLE_MASK_MS)
+    return () => clearTimeout(t)
+  }, [collapsed])
+
   return (
     <aside
-      style={{ width: collapsed ? 0 : width }}
-      className={cn(
-        'h-full shrink-0 overflow-hidden bg-sidebar',
-        'transition-[width] duration-200 ease-out'
-      )}
+      style={{ width: visualCollapsed ? 0 : width }}
+      className="h-full shrink-0 overflow-hidden bg-sidebar"
     >
       <div style={{ width }} className="flex h-full min-w-0 flex-col pt-1 text-sidebar-foreground">
         <SidebarTabs />

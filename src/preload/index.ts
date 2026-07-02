@@ -12,6 +12,7 @@ import {
   type WindowState,
   type SiteControlPayload,
   type SidebarPeekState,
+  type SidebarToggleMaskState,
   type CommandPalettePayload,
   type HistoryEntry
 } from '@shared/types'
@@ -70,6 +71,8 @@ const prism = {
     subscribe(IPC.OVERLAY_COMMAND_DATA, cb),
   onSidebarPeekState: (cb: (state: SidebarPeekState) => void): (() => void) =>
     subscribe(IPC.SIDEBAR_PEEK_STATE, cb),
+  onSidebarToggleMask: (cb: (state: SidebarToggleMaskState) => void): (() => void) =>
+    subscribe(IPC.SIDEBAR_TOGGLE_MASK, cb),
 
   // Contrôles de fenêtre (frameless)
   minimizeWindow: (): void => ipcRenderer.send(IPC.WINDOW_MINIMIZE),
