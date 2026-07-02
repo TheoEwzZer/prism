@@ -203,6 +203,12 @@ export class OverlayLayer {
     this.send(IPC.SIDEBAR_TOGGLE_MASK, { visible: false, width: this.peekWidth, expanded: true })
   }
 
+  /** Donne le focus OS à la fenêtre-overlay (ex. édition inline dans le peek). */
+  focusWindow(): void {
+    const win = this.ensureWindow()
+    win.focus()
+  }
+
   /** Bascule le click-through demandé par le renderer (hit-test des panneaux). */
   setIgnore(ignore: boolean): void {
     const win = this.win

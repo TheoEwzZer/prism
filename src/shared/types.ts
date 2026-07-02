@@ -119,6 +119,7 @@ export const IPC = {
   TAB_RELOAD: 'tab:reload',
   TAB_HIBERNATE: 'tab:hibernate', // send : hiberne manuellement un onglet (menu contextuel)
   TAB_RENAME: 'tab:rename', // send : renomme un onglet (customTitle) via le menu contextuel
+  TAB_RENAME_STATE: 'tab:renameState', // window <-> Main : onglet en édition inline (id | null), diffusé
   VIEW_SET_SIDEBAR: 'view:setSidebar',
   SESSION_SAVE_UI: 'session:saveUi',
   OPEN_EXTERNAL: 'app:openExternal',

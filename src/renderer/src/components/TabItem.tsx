@@ -1,5 +1,5 @@
-import { memo } from 'react'
-import { X, Globe, Loader2, Moon } from 'lucide-react'
+import { memo, useEffect, useRef, useState } from 'react'
+import { X, Globe, Loader2 } from 'lucide-react'
 import type { DraggableAttributes } from '@dnd-kit/core'
 import type { SyntheticListenerMap } from '@dnd-kit/core/dist/hooks/utilities'
 import { cn } from '@/lib/utils'
@@ -39,8 +39,27 @@ export const TabItem = memo(function TabItem({
   const isHibernated = useTabsStore((s) => s.tabs[id]?.isHibernated)
   const isActive = useTabsStore((s) => s.activeTabId === id)
 
+  const renaming = useTabsStore((s) => s.renamingTabId === id)
+
   const setActive = useTabsStore((s) => s.setActive)
   const removeTab = useTabsStore((s) => s.removeTab)
+
+  const [draft, setDraft] = useState('')
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  // Entrée en édition inline (« Renommer ») : pré-remplit le champ et sélectionne le texte. On
+  // refocalise aussi quand la FENÊTRE regagne le focus (la bascule overlay→principale au démarrage
+  // blur le champ une fois ; sans ça il resterait vide de focus).
+  useEffect(() => {
+    if (!renaming) return
+    setDraft(customTitle || title || '')
+    requestAnimationFrame(() => inputRef.current?.select())
+    const onFocus = (): void => inputRef.current?.focus()
+    window.addEventListener('focus', onFocus)
+    return () => window.removeEventListener('focus', onFocus)
+    // `customTitle`/`title` lus au démarrage de l'édition uniquement.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [renaming])
 
   // Onglet retiré du store entre-temps.
   if (title === undefined) return null
@@ -49,8 +68,26 @@ export const TabItem = memo(function TabItem({
   const displayName = customTitle || title || 'Nouvel onglet'
 
   const activate = (): void => {
+    if (renaming) return
     setActive(id)
     window.prism.activateTab(id)
+  }
+
+  const commitRename = (): void => {
+    const next = draft.trim() ? draft.trim() : null
+    window.prism.renameTab(id, next)
+    window.prism.setTabRenaming(null)
+  }
+  // Blur : on ne valide QUE si la fenêtre garde le focus (= vrai clic ailleurs dans la fenêtre). Si
+  // c'est la fenêtre entière qui perd le focus (bascule overlay→principale au démarrage), on ignore
+  // → l'effet ci-dessus refocalisera le champ, l'édition n'est pas interrompue par erreur.
+  const onRenameBlur = (): void => {
+    if (document.hasFocus()) commitRename()
+  }
+  const onRenameKeyDown = (e: React.KeyboardEvent<HTMLInputElement>): void => {
+    e.stopPropagation()
+    if (e.key === 'Enter') commitRename()
+    else if (e.key === 'Escape') window.prism.setTabRenaming(null)
   }
 
   const doClose = (): void => {
@@ -118,26 +155,44 @@ export const TabItem = memo(function TabItem({
         )}
       </span>
 
-      {/* `min-w-0` : indispensable pour que `truncate` puisse rétrécir sous la taille du texte. Au
+      {/* Édition inline (« Renommer », façon Arc) : un champ remplace le nom, sinon le titre tronqué.
+          `min-w-0` : indispensable pour que `truncate` puisse rétrécir sous la taille du texte. Au
           survol, on réserve à droite la place de la croix (`pr-6`) → le nom raccourcit et affiche `…`
           au lieu de passer sous la croix. */}
-      <span className={cn('min-w-0 flex-1 truncate group-hover:pr-6')}>{displayName}</span>
+      {renaming ? (
+        <input
+          ref={inputRef}
+          value={draft}
+          autoFocus
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={onRenameKeyDown}
+          onBlur={onRenameBlur}
+          // Neutralise l'activation de l'onglet et le démarrage du drag pendant l'édition.
+          onClick={(e) => e.stopPropagation()}
+          onPointerDown={(e) => e.stopPropagation()}
+          className="min-w-0 flex-1 rounded bg-white/10 px-1 text-sm text-white outline-none ring-1 ring-white/25"
+        />
+      ) : (
+        <span className={cn('min-w-0 flex-1 truncate group-hover:pr-6')}>{displayName}</span>
+      )}
 
       {/* Croix en overlay (absolue) : toujours entièrement visible au survol, calée à droite, par
           DESSUS l'onglet — sa taille ne dépend jamais de la longueur du nom ni de la sidebar. */}
-      <button
-        aria-label="Fermer l'onglet"
-        onClick={close}
-        // Empêche le drag de démarrer quand on clique la croix (le pointer-down remonterait
-        // sinon aux listeners du row et lancerait un tri).
-        onPointerDown={(e) => e.stopPropagation()}
-        className={cn(
-          'absolute top-1/2 right-1 flex size-5 -translate-y-1/2 items-center justify-center rounded',
-          'text-slate-300 opacity-0 transition-opacity group-hover:opacity-100 hover:bg-white/15'
-        )}
-      >
-        <X className="size-3.5" />
-      </button>
+      {!renaming && (
+        <button
+          aria-label="Fermer l'onglet"
+          onClick={close}
+          // Empêche le drag de démarrer quand on clique la croix (le pointer-down remonterait
+          // sinon aux listeners du row et lancerait un tri).
+          onPointerDown={(e) => e.stopPropagation()}
+          className={cn(
+            'absolute top-1/2 right-1 flex size-5 -translate-y-1/2 items-center justify-center rounded',
+            'text-slate-300 opacity-0 transition-opacity group-hover:opacity-100 hover:bg-white/15'
+          )}
+        >
+          <X className="size-3.5" />
+        </button>
+      )}
     </div>
   )
 })

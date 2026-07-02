@@ -1,7 +1,6 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { Copy, Moon, Pencil } from 'lucide-react'
+import { useLayoutEffect, useRef, useState } from 'react'
+import { Copy, Pencil } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { useTabsStore } from '@/store/tabsStore'
 import type { TabMenuPayload } from '@shared/types'
 
 const MENU_WIDTH = 190
@@ -14,14 +13,9 @@ const MENU_WIDTH = 190
  * `data-overlay-hit="tabmenu"` marque la zone interactive pour le hit-test de la couche. La
  * fermeture (clic extérieur / Échap) est gérée par la couche.
  */
-export function TabContextMenu({ data }: { data: TabMenuPayload }): React.JSX.Element {
-  const { tabId, url, isHibernated, x, y } = data
-  const title = useTabsStore((s) => s.tabs[tabId]?.title)
-  const customTitle = useTabsStore((s) => s.tabs[tabId]?.customTitle)
+export function TabContextMenu({ data }: Readonly<{ data: TabMenuPayload }>): React.JSX.Element {
+  const { tabId, url, x, y } = data
 
-  const [renaming, setRenaming] = useState(false)
-  const [draft, setDraft] = useState('')
-  const inputRef = useRef<HTMLInputElement>(null)
   const rootRef = useRef<HTMLDivElement>(null)
   // Position clampée dans le viewport (le clic peut être près d'un bord).
   const [pos, setPos] = useState({ left: x, top: y })
@@ -33,11 +27,7 @@ export function TabContextMenu({ data }: { data: TabMenuPayload }): React.JSX.El
     const left = Math.min(x, window.innerWidth - width - 8)
     const top = Math.min(y, window.innerHeight - height - 8)
     setPos({ left: Math.max(8, left), top: Math.max(8, top) })
-  }, [x, y, renaming])
-
-  useEffect(() => {
-    if (renaming) inputRef.current?.select()
-  }, [renaming])
+  }, [x, y])
 
   const close = (): void => window.prism.closeTabMenu()
 
@@ -45,24 +35,10 @@ export function TabContextMenu({ data }: { data: TabMenuPayload }): React.JSX.El
     if (url) window.prism.copyText(url)
     close()
   }
-  const startRename = (): void => {
-    setDraft(customTitle || title || '')
-    setRenaming(true)
-  }
-  const commitRename = (): void => {
-    const next = draft.trim() ? draft.trim() : null
-    window.prism.renameTab(tabId, next)
+  const rename = (): void => {
+    // Démarre l'édition inline dans la sidebar (façon Arc) ; le Main la diffuse à la bonne fenêtre.
+    window.prism.setTabRenaming(tabId)
     close()
-  }
-  const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>): void => {
-    // Échap est aussi géré par la couche (fermeture) ; on stoppe pour éviter le double effet.
-    if (e.key === 'Enter') {
-      e.stopPropagation()
-      commitRename()
-    } else if (e.key === 'Escape') {
-      e.stopPropagation()
-      close()
-    }
   }
 
   return (
@@ -75,28 +51,13 @@ export function TabContextMenu({ data }: { data: TabMenuPayload }): React.JSX.El
         'bg-popover p-1 text-slate-200 shadow-2xl shadow-black/60'
       )}
     >
-      {renaming ? (
-        <input
-          ref={inputRef}
-          value={draft}
-          autoFocus
-          onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={onKeyDown}
-          onBlur={commitRename}
-          placeholder="Nom de l'onglet"
-          className="w-full rounded-md bg-white/10 px-2 py-1.5 text-sm text-white outline-none ring-1 ring-white/20"
-        />
-      ) : (
-        <>
-          <Row
-            icon={<Copy className="size-4" />}
-            label="Copier l'URL"
-            disabled={!url}
-            onClick={copyUrl}
-          />
-          <Row icon={<Pencil className="size-4" />} label="Renommer" onClick={startRename} />
-        </>
-      )}
+      <Row
+        icon={<Copy className="size-4" />}
+        label="Copier l'URL"
+        disabled={!url}
+        onClick={copyUrl}
+      />
+      <Row icon={<Pencil className="size-4" />} label="Renommer" onClick={rename} />
     </div>
   )
 }
@@ -106,12 +67,12 @@ function Row({
   label,
   onClick,
   disabled
-}: {
+}: Readonly<{
   icon: React.ReactNode
   label: string
   onClick: () => void
   disabled?: boolean
-}): React.JSX.Element {
+}>): React.JSX.Element {
   return (
     <button
       onClick={onClick}

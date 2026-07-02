@@ -49,6 +49,8 @@ export function OverlayLayer(): React.JSX.Element {
   const [site, setSite] = useState<SiteControlPayload | null>(null)
   const [tabMenu, setTabMenu] = useState<TabMenuPayload | null>(null)
   const [command, setCommand] = useState<CommandPalettePayload | null>(null)
+  // Édition inline d'un onglet en cours (dans le peek) : « épingle » le peek (cf. hit-test).
+  const renaming = useTabsStore((s) => s.renamingTabId !== null)
 
   useTabEvents() // patchs + convergence de l'état organisationnel relayés par le Main
   usePersistUiState(ready) // le peek est pleinement fonctionnel : ses changements remontent au Main
@@ -79,6 +81,7 @@ export function OverlayLayer(): React.JSX.Element {
   const armedRef = useRef(false)
   const resizingRef = useRef(false)
   const tabMenuOpenRef = useRef(false)
+  const renamingRef = useRef(false)
 
   const setIgnore = (ignore: boolean): void => {
     if (ignoreRef.current === ignore) return
@@ -110,7 +113,9 @@ export function OverlayLayer(): React.JSX.Element {
     // Un menu contextuel ouvert « épingle » le peek : tant qu'il est là, la souris peut sortir du
     // panneau sans fermer le peek (sinon le menu resterait orphelin). L'auto-fermeture reprend à la
     // fermeture du menu (cf. effet `tabMenu`, qui relance un hit-test).
-    if (tabMenuOpenRef.current) return
+    // Un menu contextuel OU une édition inline en cours « épingle » le peek (souris libre de sortir
+    // du panneau sans le fermer). L'auto-fermeture reprend à leur fin (effets dédiés → hit-test).
+    if (tabMenuOpenRef.current || renamingRef.current) return
     // Fermeture auto du peek dès que la souris n'est plus dessus (armée après l'ouverture). Survoler
     // la poignée de resize (`resize`) ne ferme PAS le peek : elle en fait partie (bord droit).
     if (peekOpenRef.current && armedRef.current && kind !== 'peek' && kind !== 'resize') {
@@ -212,6 +217,14 @@ export function OverlayLayer(): React.JSX.Element {
     // hitTest lit tout via refs (listener stable).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tabMenu])
+
+  // Édition inline en cours : mise à jour du miroir + reprise de l'auto-fermeture du peek à la fin.
+  useEffect(() => {
+    renamingRef.current = renaming
+    if (!renaming) hitTest(lastPos.current.x, lastPos.current.y)
+    // hitTest lit tout via refs (listener stable).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [renaming])
 
   // Palette de commande : même logique (clic extérieur / Échap). Échap est géré ici plutôt que
   // par cmdk pour fermer la fenêtre-overlay (et pas seulement vider le champ).

@@ -46,6 +46,10 @@ const prism = {
   hibernateTab: (id: string): void => ipcRenderer.send(IPC.TAB_HIBERNATE, id),
   renameTab: (id: string, title: string | null): void =>
     ipcRenderer.send(IPC.TAB_RENAME, { id, title }),
+  // Démarre/arrête l'édition inline d'un onglet (id ou null) ; le Main diffuse aux deux fenêtres.
+  setTabRenaming: (id: string | null): void => ipcRenderer.send(IPC.TAB_RENAME_STATE, id),
+  onTabRenaming: (cb: (id: string | null) => void): (() => void) =>
+    subscribe(IPC.TAB_RENAME_STATE, cb),
   setSidebar: (intent: SidebarIntent): void => ipcRenderer.send(IPC.VIEW_SET_SIDEBAR, intent),
   // Drag de la poignée de resize (émis par la couche d'overlay qui possède le geste).
   setSidebarWidth: (width: number): void => ipcRenderer.send(IPC.SIDEBAR_SET_WIDTH, width),

@@ -12,6 +12,7 @@ export function useTabEvents(): void {
   const addTab = useTabsStore((s) => s.addTab)
   const removeTab = useTabsStore((s) => s.removeTab)
   const applyRemoteUi = useTabsStore((s) => s.applyRemoteUi)
+  const setRenamingTab = useTabsStore((s) => s.setRenamingTab)
   const lastBatchId = useRef(0)
 
   useEffect(() => {
@@ -31,4 +32,8 @@ export function useTabEvents(): void {
   // Convergence de l'état organisationnel (ordre, favoris, dossiers, onglet actif) rediffusé
   // par le Main depuis l'AUTRE fenêtre (principale ↔ overlay). Anti-écho géré dans le store.
   useEffect(() => window.prism.onUiStateSync(applyRemoteUi), [applyRemoteUi])
+
+  // Édition inline du nom (« Renommer ») : diffusée par le Main aux deux fenêtres (l'onglet peut
+  // être dans la sidebar principale ou dans le peek de l'overlay).
+  useEffect(() => window.prism.onTabRenaming(setRenamingTab), [setRenamingTab])
 }

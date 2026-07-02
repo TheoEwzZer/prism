@@ -321,8 +321,28 @@ export function setupBrowser(window: BrowserWindow, initialSession: SessionData)
   )
   ipcMain.on(IPC.OVERLAY_COMMAND_CLOSE, () => overlay.hideCommand())
   ipcMain.on(IPC.OVERLAY_SET_IGNORE, (_e, ignore: boolean) => overlay.setIgnore(ignore))
-  ipcMain.on(IPC.SIDEBAR_PEEK_OPEN, () => overlay.openPeek(session.sidebarWidth))
-  ipcMain.on(IPC.SIDEBAR_PEEK_CLOSE, () => overlay.closePeek())
+  let peekOpen = false
+  ipcMain.on(IPC.SIDEBAR_PEEK_OPEN, () => {
+    peekOpen = true
+    overlay.openPeek(session.sidebarWidth)
+  })
+  ipcMain.on(IPC.SIDEBAR_PEEK_CLOSE, () => {
+    peekOpen = false
+    overlay.closePeek()
+  })
+
+  // Édition inline du nom d'un onglet (« Renommer »). Diffusée aux DEUX fenêtres (l'onglet peut être
+  // dans la sidebar principale OU dans le peek de l'overlay), et on donne le focus OS à la fenêtre
+  // concernée pour que le champ inline reçoive bien le clavier (le menu contextuel avait le focus).
+  ipcMain.on(IPC.TAB_RENAME_STATE, (_e, tabId: string | null) => {
+    // Focus AVANT diffusion : la fenêtre cible est déjà focalisée quand le champ inline se monte
+    // (autofocus stable, sinon le champ se blur aussitôt à la bascule de focus overlay→principale).
+    if (tabId !== null) {
+      if (peekOpen) overlay.focusWindow()
+      else if (!window.isDestroyed()) window.focus()
+    }
+    broadcast(IPC.TAB_RENAME_STATE, tabId)
+  })
 
   ipcMain.on(IPC.SESSION_SAVE_UI, (event, ui: UiPersistState) => {
     session.order = ui.order
@@ -405,6 +425,7 @@ export function setupBrowser(window: BrowserWindow, initialSession: SessionData)
     ipcMain.removeAllListeners(IPC.OVERLAY_SET_IGNORE)
     ipcMain.removeAllListeners(IPC.SIDEBAR_PEEK_OPEN)
     ipcMain.removeAllListeners(IPC.SIDEBAR_PEEK_CLOSE)
+    ipcMain.removeAllListeners(IPC.TAB_RENAME_STATE)
     ipcMain.removeAllListeners(IPC.SIDEBAR_SET_WIDTH)
     ipcMain.removeAllListeners(IPC.SESSION_SAVE_UI)
     ipcMain.removeAllListeners(IPC.WINDOW_MINIMIZE)
