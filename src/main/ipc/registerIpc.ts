@@ -191,7 +191,6 @@ export function setupBrowser(window: BrowserWindow, initialSession: SessionData)
     return {
       tabs: tabManager.getAllMeta(),
       folders: session.folders,
-      pinnedApps: session.pinnedApps,
       order: session.order,
       pinnedTabIds: session.pinnedTabIds,
       activeTabId: tabManager.getActiveTabId() ?? session.activeTabId,
@@ -267,7 +266,6 @@ export function setupBrowser(window: BrowserWindow, initialSession: SessionData)
     session.order = ui.order
     session.pinnedTabIds = ui.pinnedTabIds
     session.folders = ui.folders
-    session.pinnedApps = ui.pinnedApps
     session.activeTabId = ui.activeTabId
     // La largeur/repli de la sidebar sont propres à la fenêtre principale : l'overlay (qui
     // ne rend pas le toggle) ne doit jamais les écraser avec ses valeurs par défaut.
@@ -282,7 +280,6 @@ export function setupBrowser(window: BrowserWindow, initialSession: SessionData)
       order: session.order,
       pinnedTabIds: session.pinnedTabIds,
       folders: session.folders,
-      pinnedApps: session.pinnedApps,
       activeTabId: session.activeTabId
     }
     if (!window.isDestroyed() && window.webContents.id !== event.sender.id) {

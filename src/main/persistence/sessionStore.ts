@@ -14,11 +14,6 @@ const SESSION_FILE = 'prism-session.json'
 const DEFAULT_SESSION: SessionData = {
   tabs: [],
   folders: [],
-  pinnedApps: [
-    { id: 'pin-gmail', name: 'Gmail', url: 'https://mail.google.com', favicon: null },
-    { id: 'pin-cal', name: 'Agenda', url: 'https://calendar.google.com', favicon: null },
-    { id: 'pin-gpt', name: 'ChatGPT', url: 'https://chat.openai.com', favicon: null }
-  ],
   order: [],
   pinnedTabIds: [],
   activeTabId: null,

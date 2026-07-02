@@ -1,6 +1,5 @@
 import { useTabsStore } from '@/store/tabsStore'
 import { cn } from '@/lib/utils'
-import { PinnedApps } from './PinnedApps'
 import { SidebarTabs } from './SidebarTabs'
 
 /**
@@ -26,7 +25,6 @@ export function Sidebar(): React.JSX.Element {
       )}
     >
       <div style={{ width }} className="flex h-full min-w-0 flex-col pt-1 text-sidebar-foreground">
-        <PinnedApps />
         <SidebarTabs />
       </div>
     </aside>

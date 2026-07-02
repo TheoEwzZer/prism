@@ -2,7 +2,6 @@ import { create } from 'zustand'
 import type {
   TabState,
   FolderState,
-  PinnedApp,
   SessionData,
   TabPatch,
   UiPersistState,
@@ -40,7 +39,6 @@ interface TabsState {
    *  l'appartenance ET de l'ordre des favoris ; les onglets « actuels » = racine ∉ pinnedIds. */
   pinnedIds: string[]
   folders: FolderState[]
-  pinnedApps: PinnedApp[]
   activeTabId: string | null
   sidebarCollapsed: boolean
   sidebarWidth: number
@@ -70,7 +68,6 @@ export const useTabsStore = create<TabsState>((set, get) => ({
   order: [],
   pinnedIds: [],
   folders: [],
-  pinnedApps: [],
   activeTabId: null,
   sidebarCollapsed: false,
   sidebarWidth: 256,
@@ -90,7 +87,6 @@ export const useTabsStore = create<TabsState>((set, get) => ({
       order,
       pinnedIds,
       folders: session.folders,
-      pinnedApps: session.pinnedApps,
       activeTabId: session.activeTabId,
       sidebarCollapsed: session.sidebarCollapsed,
       sidebarWidth: session.sidebarWidth
@@ -184,7 +180,6 @@ export const useTabsStore = create<TabsState>((set, get) => ({
           order,
           pinnedIds,
           folders: sync.folders,
-          pinnedApps: sync.pinnedApps,
           activeTabId: sync.activeTabId
         }
       })
@@ -199,7 +194,6 @@ export const useTabsStore = create<TabsState>((set, get) => ({
       order: s.order,
       pinnedTabIds: s.pinnedIds,
       folders: s.folders,
-      pinnedApps: s.pinnedApps,
       activeTabId: s.activeTabId,
       sidebarWidth: s.sidebarWidth,
       sidebarCollapsed: s.sidebarCollapsed

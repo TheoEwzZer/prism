@@ -30,19 +30,10 @@ export interface FolderState {
   collapsed: boolean
 }
 
-/** Application épinglée (favori) affichée en haut de la sidebar. */
-export interface PinnedApp {
-  id: string
-  name: string
-  url: string
-  favicon: string | null
-}
-
 /** État de session persisté sur disque et restauré au démarrage. */
 export interface SessionData {
   tabs: TabState[]
   folders: FolderState[]
-  pinnedApps: PinnedApp[]
   /** Ordre d'affichage des onglets (ids) au niveau racine + dans les dossiers. */
   order: string[]
   /** Onglets « favoris » (épinglés), dans l'ordre de la liste de favoris de la sidebar. */
@@ -66,7 +57,6 @@ export interface UiPersistState {
   order: string[]
   pinnedTabIds: string[]
   folders: FolderState[]
-  pinnedApps: PinnedApp[]
   activeTabId: string | null
   sidebarWidth: number
   sidebarCollapsed: boolean
@@ -81,7 +71,6 @@ export interface UiSyncState {
   order: string[]
   pinnedTabIds: string[]
   folders: FolderState[]
-  pinnedApps: PinnedApp[]
   activeTabId: string | null
 }
 

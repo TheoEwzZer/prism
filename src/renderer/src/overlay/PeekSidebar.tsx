@@ -1,4 +1,3 @@
-import { PinnedApps } from '@/components/PinnedApps'
 import { SidebarTabs } from '@/components/SidebarTabs'
 import { cn } from '@/lib/utils'
 
@@ -21,7 +20,6 @@ export function PeekSidebar({ open, width }: { open: boolean; width: number }): 
         open ? 'translate-x-0' : '-translate-x-full'
       )}
     >
-      <PinnedApps />
       <SidebarTabs />
     </aside>
   )
