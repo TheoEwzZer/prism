@@ -18,6 +18,21 @@ function urlLabel(url: string): string {
   }
 }
 
+/**
+ * Titre à afficher pour un onglet restauré (hiberné, sans vue). On corrige les titres périmés :
+ * page interne → titre canonique ; titre vide ou placeholder de chargement → nom de domaine. Les
+ * vrais titres de page persistés (« Gmail… ») sont conservés tels quels.
+ */
+function restoredTitle(meta: TabState): string {
+  if (isInternalUrl(meta.url)) return internalPageTitle(meta.url)
+  const t = meta.title?.trim()
+  // Vide / placeholder de chargement / titre interne réservé ayant fui sur une URL normale (séquelle
+  // d'anciennes sessions corrompues) → on retombe sur le nom de domaine. Le vrai titre reviendra au
+  // réveil de l'onglet.
+  if (!t || t === 'Chargement…' || t === 'Historique' || t === 'Prism') return urlLabel(meta.url)
+  return t
+}
+
 /** Réglages d'hibernation / layout (ajustables). */
 const HIBERNATE_AFTER_MS = 15 * 60 * 1000 // marque un onglet inactif comme éligible
 const MAX_LIVE_VIEWS = 8 // cap strict de WebContentsView vivantes (LRU au-delà)
@@ -113,6 +128,18 @@ export class TabManager {
     entry?.view?.setBounds(b)
   }
 
+  /**
+   * Applique un patch à la meta (SEULE source de vérité persistée côté Main) PUIS le remonte au
+   * Renderer. Indispensable : sans la mise à jour de `entry.meta`, les events `page-title-updated` /
+   * `page-favicon-updated` ne mettaient à jour QUE l'UI, et la session sauvegardée (`getAllMeta`)
+   * conservait les valeurs périmées de `createTab` (« Chargement… », favicon `null`, ancien titre).
+   */
+  private emitStore(id: string, patch: TabPatch): void {
+    const entry = this.tabs.get(id)
+    if (entry) Object.assign(entry.meta, patch)
+    this.emitPatch(id, patch)
+  }
+
   // ---------------------------------------------------------------------------
   // Création / enregistrement d'onglets
   // ---------------------------------------------------------------------------
@@ -120,7 +147,7 @@ export class TabManager {
   /** Restaure la meta d'un onglet SANS créer de vue (lazy / hibernated au boot). */
   registerTab(meta: TabState): void {
     this.tabs.set(meta.id, {
-      meta: { ...meta, isHibernated: true, isLoading: false },
+      meta: { ...meta, isHibernated: true, isLoading: false, title: restoredTitle(meta) },
       view: null,
       lastActive: 0
     })
@@ -175,12 +202,12 @@ export class TabManager {
 
     entry.view = view
     entry.meta.isHibernated = false
-    this.emitPatch(id, { isHibernated: false })
+    this.emitStore(id, { isHibernated: false })
 
     if (entry.meta.url) {
       entry.meta.isLoading = true
       view.webContents.loadURL(entry.meta.url).catch(() => {
-        this.emitPatch(id, { isLoading: false })
+        this.emitStore(id, { isLoading: false })
       })
     }
     return view
@@ -219,31 +246,31 @@ export class TabManager {
     })
 
     wc.on('page-title-updated', (_e, title) => {
-      this.emitPatch(id, { title })
+      this.emitStore(id, { title })
       const url = this.tabs.get(id)?.meta.url
       if (url) this.history?.updateMeta(url, { title })
     })
     wc.on('page-favicon-updated', (_e, favicons) => {
       const favicon = favicons[0] ?? null
-      this.emitPatch(id, { favicon })
+      this.emitStore(id, { favicon })
       const url = this.tabs.get(id)?.meta.url
       if (url && favicon) this.history?.updateMeta(url, { favicon })
     })
-    wc.on('did-start-loading', () => this.emitPatch(id, { isLoading: true }))
+    wc.on('did-start-loading', () => this.emitStore(id, { isLoading: true }))
     wc.on('did-stop-loading', () => {
-      this.emitPatch(id, { isLoading: false, ...this.navFlags(id) })
+      this.emitStore(id, { isLoading: false, ...this.navFlags(id) })
     })
     wc.on('did-navigate', (_e, url) => {
       const entry = this.tabs.get(id)
       if (entry) entry.meta.url = url
-      this.emitPatch(id, { url, ...this.navFlags(id) })
+      this.emitStore(id, { url, ...this.navFlags(id) })
       this.history?.visit(url)
     })
     wc.on('did-navigate-in-page', (_e, url, isMainFrame) => {
       if (!isMainFrame) return
       const entry = this.tabs.get(id)
       if (entry) entry.meta.url = url
-      this.emitPatch(id, { url, ...this.navFlags(id) })
+      this.emitStore(id, { url, ...this.navFlags(id) })
     })
   }
 
@@ -285,7 +312,7 @@ export class TabManager {
     if (isInternalUrl(entry.meta.url)) {
       if (entry.meta.isHibernated) {
         entry.meta.isHibernated = false
-        this.emitPatch(id, { isHibernated: false })
+        this.emitStore(id, { isHibernated: false })
       }
       this.applyBoundsNow()
       this.enforceHibernation()
@@ -314,7 +341,7 @@ export class TabManager {
     this.destroyView(entry)
     entry.meta.isHibernated = true
     entry.meta.isLoading = false
-    this.emitPatch(id, { isHibernated: true, isLoading: false })
+    this.emitStore(id, { isHibernated: true, isLoading: false })
   }
 
   /** Renomme un onglet (nom personnalisé). `title` vidé/`null` = retour au titre automatique. */
@@ -323,7 +350,7 @@ export class TabManager {
     if (!entry) return
     const customTitle = title && title.trim() ? title.trim() : null
     entry.meta.customTitle = customTitle
-    this.emitPatch(id, { customTitle })
+    this.emitStore(id, { customTitle })
   }
 
   /** Ferme définitivement un onglet (détruit la vue + libère les ressources). */
@@ -369,7 +396,7 @@ export class TabManager {
         canGoForward: false,
         isHibernated: false
       })
-      this.emitPatch(id, {
+      this.emitStore(id, {
         url,
         title: entry.meta.title,
         favicon: null,
@@ -388,8 +415,10 @@ export class TabManager {
     // Navigation normale : crée la vue si besoin (ex. l'onglet était interne) et charge l'URL.
     const view = this.ensureView(id)
     if (!view || view.webContents.isDestroyed()) return
-    entry.meta.isLoading = true
-    view.webContents.loadURL(url).catch(() => this.emitPatch(id, { isLoading: false }))
+    // On repart d'un titre/favicon neufs (nom de domaine) : sinon l'ancien titre — ex. « Historique »
+    // d'une page interne quittée — persisterait tant que la nouvelle page n'a pas émis le sien.
+    this.emitStore(id, { url, title: urlLabel(url), favicon: null, isLoading: true })
+    view.webContents.loadURL(url).catch(() => this.emitStore(id, { isLoading: false }))
     // Si l'onglet actif redevient une vue native (interne→normale), il faut l'afficher.
     if (this.activeTabId === id) {
       this.lastLayoutSig = null
@@ -452,7 +481,7 @@ export class TabManager {
       this.destroyView(entry)
       entry.meta.isHibernated = true
       entry.meta.isLoading = false
-      this.emitPatch(id, { isHibernated: true, isLoading: false })
+      this.emitStore(id, { isHibernated: true, isLoading: false })
       toEvict--
     }
   }
