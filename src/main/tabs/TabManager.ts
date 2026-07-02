@@ -10,8 +10,8 @@ const VIEW_INSET = 8 // marge autour de la vue (look "carte" arrondie façon Arc
 const VIEW_RADIUS = 10
 const COLLAPSED_SIDEBAR_WIDTH = 0 // repliée : la sidebar disparaît, la vue web occupe tout
 // Hauteur de la barre supérieure pleine largeur (doit rester synchronisée avec la classe
-// `h-11` de <TopBar> côté renderer). La vue web démarre sous cette barre.
-const TOPBAR_HEIGHT = 44
+// `h-6` de <TopBar> côté renderer). La vue web démarre sous cette barre.
+const TOPBAR_HEIGHT = 24
 
 interface TabEntry {
   meta: TabState

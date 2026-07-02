@@ -25,7 +25,7 @@ export function Sidebar(): React.JSX.Element {
         'transition-[width] duration-200 ease-out'
       )}
     >
-      <div style={{ width }} className="flex h-full min-w-0 flex-col pt-2 text-sidebar-foreground">
+      <div style={{ width }} className="flex h-full min-w-0 flex-col pt-1 text-sidebar-foreground">
         <PinnedApps />
         <TabList />
       </div>

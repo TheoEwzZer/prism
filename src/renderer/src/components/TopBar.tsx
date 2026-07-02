@@ -59,7 +59,7 @@ export function TopBar(): React.JSX.Element {
   )
 
   return (
-    <div className="app-drag relative flex h-11 shrink-0 items-center border-b border-white/5 bg-sidebar">
+    <div className="app-drag relative flex h-6 shrink-0 items-center border-b border-white/5 bg-sidebar">
       {/* Zone gauche. Ouverte : largeur = sidebar, nav collée au bord droit. Repliée : cluster
           compact auto (pas d'espace vide), avec la nav toujours visible. */}
       {collapsed ? (

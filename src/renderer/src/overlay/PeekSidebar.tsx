@@ -15,8 +15,8 @@ export function PeekSidebar({ open, width }: { open: boolean; width: number }): 
       data-overlay-hit="peek"
       style={{ width }}
       className={cn(
-        'pointer-events-auto absolute top-11 bottom-0 left-0 flex flex-col',
-        'border-r border-white/10 bg-sidebar pt-2 text-sidebar-foreground',
+        'pointer-events-auto absolute top-6 bottom-0 left-0 flex flex-col',
+        'border-r border-white/10 bg-sidebar pt-1 text-sidebar-foreground',
         'shadow-2xl shadow-black/40 transition-transform duration-200 ease-out will-change-transform',
         open ? 'translate-x-0' : '-translate-x-full'
       )}
