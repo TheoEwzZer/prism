@@ -59,7 +59,7 @@ export function TopBar(): React.JSX.Element {
   )
 
   return (
-    <div className="app-drag relative flex h-6 shrink-0 items-center border-b border-white/5 bg-sidebar">
+    <div className="app-drag relative flex h-8 shrink-0 items-center border-b border-white/5 bg-sidebar">
       {/* Zone gauche. Ouverte : largeur = sidebar, nav collée au bord droit. Repliée : cluster
           compact auto (pas d'espace vide), avec la nav toujours visible. */}
       {collapsed ? (
@@ -141,7 +141,7 @@ function IconButton({
       onClick={onClick}
       disabled={disabled}
       className={cn(
-        'flex size-7 items-center justify-center rounded-md transition-colors',
+        'flex size-6 items-center justify-center rounded-md transition-colors',
         active
           ? 'bg-primary/20 text-primary hover:bg-primary/30'
           : 'text-slate-400 hover:bg-white/10 hover:text-white',
@@ -169,7 +169,7 @@ function WindowButton({
       aria-label={label}
       onClick={onClick}
       className={cn(
-        'flex size-7 items-center justify-center rounded-md text-slate-400 transition-colors',
+        'flex size-6 items-center justify-center rounded-md text-slate-400 transition-colors',
         danger ? 'hover:bg-red-500 hover:text-white' : 'hover:bg-white/10 hover:text-white'
       )}
     >

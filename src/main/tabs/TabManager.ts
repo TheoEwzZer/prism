@@ -10,8 +10,9 @@ const VIEW_INSET = 8 // marge autour de la vue (look "carte" arrondie façon Arc
 const VIEW_RADIUS = 10
 const COLLAPSED_SIDEBAR_WIDTH = 0 // repliée : la sidebar disparaît, la vue web occupe tout
 // Hauteur de la barre supérieure pleine largeur (doit rester synchronisée avec la classe
-// `h-6` de <TopBar> côté renderer). La vue web démarre sous cette barre.
-const TOPBAR_HEIGHT = 24
+// `h-8` de <TopBar> côté renderer). La vue web démarre juste sous cette barre : la barre
+// englobe déjà la marge haute de la carte, donc pas de VIEW_INSET supplémentaire en haut.
+const TOPBAR_HEIGHT = 32
 
 interface TabEntry {
   meta: TabState
@@ -67,12 +68,12 @@ export class TabManager {
     const { width, height } = this.window.getContentBounds()
     const sidebar = this.sidebarCollapsed ? COLLAPSED_SIDEBAR_WIDTH : this.sidebarWidth
     const x = sidebar + VIEW_INSET
-    const y = TOPBAR_HEIGHT + VIEW_INSET
+    const y = TOPBAR_HEIGHT
     return {
       x,
       y,
       width: Math.max(0, width - sidebar - VIEW_INSET * 2),
-      height: Math.max(0, height - TOPBAR_HEIGHT - VIEW_INSET * 2)
+      height: Math.max(0, height - TOPBAR_HEIGHT - VIEW_INSET)
     }
   }
 
