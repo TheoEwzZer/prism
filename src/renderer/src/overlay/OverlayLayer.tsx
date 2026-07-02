@@ -57,6 +57,12 @@ export function OverlayLayer(): React.JSX.Element {
   }
 
   const hitTest = (x: number, y: number): void => {
+    // Drag & drop en cours dans le peek : on garde la capture souris et on ne ferme pas le peek,
+    // même si le curseur survole le DragOverlay (hors `[data-overlay-hit]`).
+    if (document.body.hasAttribute('data-dnd-dragging')) {
+      setIgnore(false)
+      return
+    }
     if (!anyOpenRef.current) {
       setIgnore(true)
       return

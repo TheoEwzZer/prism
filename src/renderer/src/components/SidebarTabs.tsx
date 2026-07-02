@@ -98,6 +98,10 @@ export function SidebarTabs(): React.JSX.Element {
   const onDragStart = (e: DragStartEvent): void => {
     setDragging(e.active.id as string)
     setBoth({ fav: favBase, cur: curBase })
+    // Marque un drag en cours : dans la fenêtre-overlay, ça empêche le hit-test de repasser en
+    // click-through (et de fermer le peek) quand le curseur survole le DragOverlay. Sans effet
+    // dans la fenêtre principale.
+    document.body.setAttribute('data-dnd-dragging', '')
   }
 
   const onDragOver = (e: DragOverEvent): void => {
@@ -138,6 +142,7 @@ export function SidebarTabs(): React.JSX.Element {
     }
     setBoth(null)
     setDragging(null)
+    document.body.removeAttribute('data-dnd-dragging')
   }
 
   const clearCurrent = (): void => {
@@ -164,6 +169,7 @@ export function SidebarTabs(): React.JSX.Element {
       onDragCancel={() => {
         setBoth(null)
         setDragging(null)
+        document.body.removeAttribute('data-dnd-dragging')
       }}
     >
       <div className="flex min-h-0 flex-1 flex-col">
