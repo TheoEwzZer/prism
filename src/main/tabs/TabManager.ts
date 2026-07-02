@@ -9,6 +9,15 @@ import {
 } from '@shared/types'
 import { FrameCoalescer } from '../utils/scheduler'
 
+/** Nom lisible dérivé d'une URL (hostname sans `www.`) pour titrer un onglet avant chargement. */
+function urlLabel(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, '') || url
+  } catch {
+    return url
+  }
+}
+
 /** Réglages d'hibernation / layout (ajustables). */
 const HIBERNATE_AFTER_MS = 15 * 60 * 1000 // marque un onglet inactif comme éligible
 const MAX_LIVE_VIEWS = 8 // cap strict de WebContentsView vivantes (LRU au-delà)
@@ -125,7 +134,7 @@ export class TabManager {
     const meta: TabState = {
       id,
       url,
-      title: internal ? internalPageTitle(url) : url ? 'Chargement…' : 'Nouvel onglet',
+      title: internal ? internalPageTitle(url) : url ? urlLabel(url) : 'Nouvel onglet',
       favicon: null,
       isLoading: false,
       canGoBack: false,

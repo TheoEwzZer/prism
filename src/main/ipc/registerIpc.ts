@@ -196,6 +196,13 @@ export function setupBrowser(window: BrowserWindow, initialSession: SessionData)
   for (const meta of initialSession.tabs) tabManager.registerTab(meta)
   tabManager.setSidebar(session.sidebarWidth, session.sidebarCollapsed)
 
+  // Exception à l'hibernation lazy : le dernier onglet actif avant la fermeture est réveillé
+  // immédiatement (vue recréée + URL chargée) pour rouvrir « direct » à la restauration, sans
+  // flash « lune ». Fait ici côté Main pour que `session:get` le renvoie déjà non hiberné.
+  if (session.activeTabId && initialSession.tabs.some((t) => t.id === session.activeTabId)) {
+    tabManager.activateTab(session.activeTabId)
+  }
+
   // --- Persistance (debouncée) ---
   function buildSession(): SessionData {
     return {
