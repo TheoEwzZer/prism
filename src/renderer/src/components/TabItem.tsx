@@ -48,10 +48,28 @@ export const TabItem = memo(function TabItem({
     window.prism.activateTab(id)
   }
 
-  const close = (e: React.MouseEvent): void => {
-    e.stopPropagation()
+  const doClose = (): void => {
     window.prism.closeTab(id)
     removeTab(id)
+  }
+
+  const close = (e: React.MouseEvent): void => {
+    e.stopPropagation()
+    doClose()
+  }
+
+  // Clic molette (bouton du milieu) = fermer l'onglet, façon Arc. `auxclick` ne se déclenche que
+  // pour les boutons non primaires ; on filtre le bouton 1 (molette).
+  const onAuxClose = (e: React.MouseEvent): void => {
+    if (e.button !== 1) return
+    e.preventDefault()
+    e.stopPropagation()
+    doClose()
+  }
+
+  // Neutralise l'autoscroll natif du bouton du milieu (déclenché au mousedown) sur cet onglet.
+  const onMiddleMouseDown = (e: React.MouseEvent): void => {
+    if (e.button === 1) e.preventDefault()
   }
 
   return (
@@ -59,6 +77,8 @@ export const TabItem = memo(function TabItem({
       ref={drag?.setNodeRef}
       style={drag?.style}
       onClick={activate}
+      onAuxClick={onAuxClose}
+      onMouseDown={onMiddleMouseDown}
       {...drag?.attributes}
       {...drag?.listeners}
       className={cn(
