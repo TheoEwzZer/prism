@@ -1,35 +1,18 @@
 import { useRef, useState } from 'react'
 import { Copy, Check, SlidersHorizontal } from 'lucide-react'
-import { Input } from '@/components/ui/input'
+import { cn } from '@/lib/utils'
 import { useTabsStore } from '@/store/tabsStore'
 
-/** Barre de saisie d'URL unifiée (Omnibox). Enter → navigue l'onglet actif (ou en crée un). */
+/**
+ * Barre d'URL de la TopBar. Ce n'est PAS un champ éditable : cliquer dessus ouvre la palette de
+ * commande (façon Arc, dans la couche d'overlay native) en mode `currentTab` — la saisie/
+ * navigation se fait là-bas. Encadrée du bouton copier (gauche) et Contrôles du site (droite).
+ */
 export function Omnibox(): React.JSX.Element {
   const activeId = useTabsStore((s) => s.activeTabId)
   const activeUrl = useTabsStore((s) => (activeId ? s.tabs[activeId]?.url : '')) ?? ''
-  const addTab = useTabsStore((s) => s.addTab)
-  const [value, setValue] = useState('')
   const [copied, setCopied] = useState(false)
   const scRef = useRef<HTMLButtonElement>(null)
-
-  // Ajustement d'état pendant le rendu (pattern recommandé, sans effet) : on resynchronise
-  // l'affichage sur l'URL de l'onglet actif quand celui-ci change ou navigue.
-  const [synced, setSynced] = useState<{ id: string | null; url: string }>({ id: null, url: '' })
-  if (synced.id !== activeId || synced.url !== activeUrl) {
-    setSynced({ id: activeId, url: activeUrl })
-    setValue(activeUrl)
-  }
-
-  const submit = async (): Promise<void> => {
-    const input = value.trim()
-    if (!input) return
-    if (activeId) {
-      window.prism.navigate(activeId, input)
-    } else {
-      const tab = await window.prism.createTab({ url: input })
-      addTab(tab)
-    }
-  }
 
   const copyUrl = (): void => {
     if (!activeUrl) return
@@ -38,7 +21,12 @@ export function Omnibox(): React.JSX.Element {
     window.setTimeout(() => setCopied(false), 1200)
   }
 
-  // Ouvre les « Contrôles du site » dans une fenêtre-overlay native (au-dessus de la page).
+  // Clic sur l'URL → palette de commande (mode onglet courant), pré-remplie avec l'URL actuelle.
+  const openPalette = (): void => {
+    window.prism.openCommandPalette({ mode: 'currentTab', activeId, initialQuery: activeUrl })
+  }
+
+  // Ouvre les « Contrôles du site » dans la couche d'overlay native (au-dessus de la page).
   const openSiteControl = (): void => {
     const el = scRef.current
     if (!el) return
@@ -49,6 +37,15 @@ export function Omnibox(): React.JSX.Element {
       anchorRight: r.right,
       anchorBottom: r.bottom
     })
+  }
+
+  let display = ''
+  try {
+    display = activeUrl
+      ? new URL(activeUrl).host + new URL(activeUrl).pathname.replace(/\/$/, '')
+      : ''
+  } catch {
+    display = activeUrl
   }
 
   return (
@@ -64,18 +61,20 @@ export function Omnibox(): React.JSX.Element {
         {copied ? <Check className="size-3.5 text-emerald-400" /> : <Copy className="size-3.5" />}
       </button>
 
-      <Input
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') void submit()
-        }}
-        placeholder="Rechercher ou saisir une URL"
-        spellCheck={false}
-        className="h-7 rounded-md border-transparent bg-white/5 px-8 text-center text-sm text-slate-200 placeholder:text-slate-500 hover:bg-white/[0.07] focus-visible:border-white/10 focus-visible:bg-white/10 focus-visible:text-left focus-visible:ring-primary/30"
-      />
+      {/* Zone URL cliquable (ouvre la palette). */}
+      <button
+        onClick={openPalette}
+        title="Rechercher ou saisir une URL"
+        className={cn(
+          'flex h-7 w-full items-center justify-center rounded-md border border-transparent px-8',
+          'bg-white/5 text-sm transition-colors hover:bg-white/[0.07]',
+          display ? 'text-slate-200' : 'text-slate-500'
+        )}
+      >
+        <span className="truncate">{display || 'Rechercher ou saisir une URL'}</span>
+      </button>
 
-      {/* Bouton droite : Contrôles du site (fenêtre-overlay native). */}
+      {/* Bouton droite : Contrôles du site (couche d'overlay native). */}
       <button
         ref={scRef}
         aria-label="Contrôles du site"

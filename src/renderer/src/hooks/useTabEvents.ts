@@ -9,6 +9,7 @@ import { useTabsStore } from '@/store/tabsStore'
  */
 export function useTabEvents(): void {
   const applyBatch = useTabsStore((s) => s.applyBatch)
+  const addTab = useTabsStore((s) => s.addTab)
   const lastBatchId = useRef(0)
 
   useEffect(() => {
@@ -19,4 +20,8 @@ export function useTabEvents(): void {
     })
     return unsubscribe
   }, [applyBatch])
+
+  // Création d'onglet (quelle que soit l'origine : sidebar, favori, palette de commande). Le
+  // Main est la source unique qui diffuse la meta ; on l'ajoute au store (idempotent).
+  useEffect(() => window.prism.onTabCreated(addTab), [addTab])
 }

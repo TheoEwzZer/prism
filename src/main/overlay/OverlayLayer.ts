@@ -1,7 +1,7 @@
 import { BrowserWindow } from 'electron'
 import { join } from 'path'
 import { is } from '@electron-toolkit/utils'
-import { IPC, type SiteControlPayload } from '@shared/types'
+import { IPC, type SiteControlPayload, type CommandPalettePayload } from '@shared/types'
 
 /**
  * Couche d'overlay UNIQUE (approche B). Une seule fenêtre transparente, sans cadre,
@@ -22,6 +22,7 @@ export class OverlayLayer {
   private win: BrowserWindow | null = null
   private ready = false
   private siteControl: SiteControlPayload | null = null
+  private command: CommandPalettePayload | null = null
   private peekOpen = false
   private lastHideAt = 0
 
@@ -62,6 +63,30 @@ export class OverlayLayer {
     this.siteControl = null
     this.lastHideAt = Date.now()
     this.send(IPC.OVERLAY_SITE_CONTROL_DATA, null)
+  }
+
+  /**
+   * Palette de commande (façon Arc). Comme les Contrôles du site, c'est un menu au clic qui
+   * prend le focus pour taper dans le champ de recherche et se fermer au clic extérieur (blur)
+   * ou sur Échap. Toggle : rouvrir alors qu'elle est ouverte la referme (Ctrl+T / clic URL).
+   */
+  toggleCommand(payload: CommandPalettePayload): void {
+    if (this.command !== null) {
+      this.hideCommand()
+      return
+    }
+    if (Date.now() - this.lastHideAt < 250) return
+    this.command = payload
+    const win = this.ensureWindow()
+    win.focus()
+    this.send(IPC.OVERLAY_COMMAND_DATA, payload)
+  }
+
+  hideCommand(): void {
+    if (this.command === null) return
+    this.command = null
+    this.lastHideAt = Date.now()
+    this.send(IPC.OVERLAY_COMMAND_DATA, null)
   }
 
   openPeek(width: number): void {
@@ -127,6 +152,7 @@ export class OverlayLayer {
       win.showInactive() // affichée en permanence, sans voler le focus
       // Resynchronise l'état courant après (re)chargement.
       this.send(IPC.OVERLAY_SITE_CONTROL_DATA, this.siteControl)
+      this.send(IPC.OVERLAY_COMMAND_DATA, this.command)
       this.send(IPC.SIDEBAR_PEEK_STATE, { open: this.peekOpen, width: 0 })
     })
 

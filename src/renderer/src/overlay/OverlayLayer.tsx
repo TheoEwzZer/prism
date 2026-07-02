@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { useTabsStore } from '@/store/tabsStore'
 import { useTabEvents } from '@/hooks/useTabEvents'
-import type { SiteControlPayload, SidebarPeekState } from '@shared/types'
+import type { SiteControlPayload, SidebarPeekState, CommandPalettePayload } from '@shared/types'
 import { PeekSidebar } from './PeekSidebar'
 import { SiteControlPopover } from './SiteControlPopover'
+import { CommandPalette } from './CommandPalette'
 
 const PEEK_ARM_MS = 150
 
@@ -21,6 +22,7 @@ export function OverlayLayer(): React.JSX.Element {
   const hydrate = useTabsStore((s) => s.hydrate)
   const [peek, setPeek] = useState<SidebarPeekState>({ open: false, width: 256 })
   const [site, setSite] = useState<SiteControlPayload | null>(null)
+  const [command, setCommand] = useState<CommandPalettePayload | null>(null)
 
   useTabEvents() // patchs relayés par le Main → sidebar toujours à jour
 
@@ -31,6 +33,7 @@ export function OverlayLayer(): React.JSX.Element {
 
   useEffect(() => window.prism.onSidebarPeekState(setPeek), [])
   useEffect(() => window.prism.onSiteControlData(setSite), [])
+  useEffect(() => window.prism.onCommandData(setCommand), [])
 
   // --- Click-through : hit-test global ---
   const ignoreRef = useRef(true)
@@ -81,7 +84,7 @@ export function OverlayLayer(): React.JSX.Element {
   }, [])
 
   // Réagit aux changements d'ouverture : (dé)verrouille la capture et arme la fermeture du peek.
-  const anyOpen = peek.open || site !== null
+  const anyOpen = peek.open || site !== null || command !== null
   useEffect(() => {
     anyOpenRef.current = anyOpen
     peekOpenRef.current = peek.open
@@ -118,10 +121,27 @@ export function OverlayLayer(): React.JSX.Element {
     }
   }, [site])
 
+  // Palette de commande : même logique (clic extérieur / Échap). Échap est géré ici plutôt que
+  // par cmdk pour fermer la fenêtre-overlay (et pas seulement vider le champ).
+  useEffect(() => {
+    if (!command) return
+    const onBlur = (): void => window.prism.closeCommandPalette()
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') window.prism.closeCommandPalette()
+    }
+    window.addEventListener('blur', onBlur)
+    window.addEventListener('keydown', onKey)
+    return () => {
+      window.removeEventListener('blur', onBlur)
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [command])
+
   return (
     <div className="pointer-events-none fixed inset-0 overflow-hidden">
       <PeekSidebar open={peek.open} width={peek.width} />
       {site && <SiteControlPopover data={site} />}
+      {command && <CommandPalette data={command} />}
     </div>
   )
 }

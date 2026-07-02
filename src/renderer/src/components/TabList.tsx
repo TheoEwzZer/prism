@@ -26,9 +26,12 @@ export function TabList(): React.JSX.Element {
     if (parent && childrenByFolder.has(parent)) childrenByFolder.get(parent)!.push(id)
   }
 
-  const newTab = async (): Promise<void> => {
-    const tab = await window.prism.createTab({})
-    useTabsStore.getState().addTab(tab)
+  const newTab = (): void => {
+    // Ouvre la palette de commande (façon Arc) plutôt que de créer un onglet vide directement.
+    window.prism.openCommandPalette({
+      mode: 'newTab',
+      activeId: useTabsStore.getState().activeTabId
+    })
   }
 
   return (

@@ -10,7 +10,8 @@ import {
   type UiPersistState,
   type WindowState,
   type SiteControlPayload,
-  type SidebarPeekState
+  type SidebarPeekState,
+  type CommandPalettePayload
 } from '@shared/types'
 
 /** Abonnement typé à un event Main -> Renderer ; retourne une fonction de désabonnement. */
@@ -46,13 +47,18 @@ const prism = {
   openSiteControl: (payload: SiteControlPayload): void =>
     ipcRenderer.send(IPC.OVERLAY_SITE_CONTROL, payload),
   openSidebarPeek: (): void => ipcRenderer.send(IPC.SIDEBAR_PEEK_OPEN),
+  openCommandPalette: (payload: CommandPalettePayload): void =>
+    ipcRenderer.send(IPC.OVERLAY_COMMAND, payload),
   // Depuis la couche d'overlay elle-même :
   closeSiteControl: (): void => ipcRenderer.send(IPC.OVERLAY_CLOSE),
+  closeCommandPalette: (): void => ipcRenderer.send(IPC.OVERLAY_COMMAND_CLOSE),
   closeSidebarPeek: (): void => ipcRenderer.send(IPC.SIDEBAR_PEEK_CLOSE),
   setOverlayIgnoreMouse: (ignore: boolean): void =>
     ipcRenderer.send(IPC.OVERLAY_SET_IGNORE, ignore),
   onSiteControlData: (cb: (payload: SiteControlPayload | null) => void): (() => void) =>
     subscribe(IPC.OVERLAY_SITE_CONTROL_DATA, cb),
+  onCommandData: (cb: (payload: CommandPalettePayload | null) => void): (() => void) =>
+    subscribe(IPC.OVERLAY_COMMAND_DATA, cb),
   onSidebarPeekState: (cb: (state: SidebarPeekState) => void): (() => void) =>
     subscribe(IPC.SIDEBAR_PEEK_STATE, cb),
 
@@ -64,6 +70,7 @@ const prism = {
   // Events (Main -> Renderer) — chaque `on*` renvoie un désabonnement
   onTabUpdated: (cb: (batch: TabUpdateBatch) => void): (() => void) =>
     subscribe(IPC.TAB_UPDATED, cb),
+  onTabCreated: (cb: (tab: TabState) => void): (() => void) => subscribe(IPC.TAB_CREATED, cb),
   onWindowState: (cb: (state: WindowState) => void): (() => void) => subscribe(IPC.WINDOW_STATE, cb)
 }
 

@@ -6,7 +6,8 @@ import {
   type CreateTabInput,
   type SidebarIntent,
   type UiPersistState,
-  type SiteControlPayload
+  type SiteControlPayload,
+  type CommandPalettePayload
 } from '@shared/types'
 import { TabManager } from '../tabs/TabManager'
 import { OverlayLayer } from '../overlay/OverlayLayer'
@@ -54,8 +55,10 @@ export function setupBrowser(window: BrowserWindow, initialSession: SessionData)
     patchCoalescer.schedule()
   }
 
-  const tabManager = new TabManager(window, emitPatch)
   const overlay = new OverlayLayer(window)
+  const tabManager = new TabManager(window, emitPatch, () =>
+    overlay.toggleCommand({ mode: 'newTab', activeId: tabManager.getActiveTabId() })
+  )
 
   // Restauration lazy : on enregistre les metas (hibernées), sans créer de vue.
   for (const meta of initialSession.tabs) tabManager.registerTab(meta)
@@ -82,6 +85,9 @@ export function setupBrowser(window: BrowserWindow, initialSession: SessionData)
 
   ipcMain.handle(IPC.TAB_CREATE, (_e, input: CreateTabInput) => {
     const meta = tabManager.createTab(input ?? {})
+    // Diffusion à la fenêtre principale : c'est la SEULE source qui ajoute l'onglet au store UI
+    // (peu importe l'initiateur — sidebar, favori, ou palette de commande dans l'overlay).
+    if (!window.isDestroyed()) window.webContents.send(IPC.TAB_CREATED, meta)
     persist()
     return meta
   })
@@ -117,6 +123,10 @@ export function setupBrowser(window: BrowserWindow, initialSession: SessionData)
     overlay.toggleSiteControl(payload)
   )
   ipcMain.on(IPC.OVERLAY_CLOSE, () => overlay.hideSiteControl())
+  ipcMain.on(IPC.OVERLAY_COMMAND, (_e, payload: CommandPalettePayload) =>
+    overlay.toggleCommand(payload)
+  )
+  ipcMain.on(IPC.OVERLAY_COMMAND_CLOSE, () => overlay.hideCommand())
   ipcMain.on(IPC.OVERLAY_SET_IGNORE, (_e, ignore: boolean) => overlay.setIgnore(ignore))
   ipcMain.on(IPC.SIDEBAR_PEEK_OPEN, () => overlay.openPeek(session.sidebarWidth))
   ipcMain.on(IPC.SIDEBAR_PEEK_CLOSE, () => overlay.closePeek())
@@ -166,6 +176,8 @@ export function setupBrowser(window: BrowserWindow, initialSession: SessionData)
     ipcMain.removeAllListeners(IPC.CLIPBOARD_WRITE)
     ipcMain.removeAllListeners(IPC.OVERLAY_SITE_CONTROL)
     ipcMain.removeAllListeners(IPC.OVERLAY_CLOSE)
+    ipcMain.removeAllListeners(IPC.OVERLAY_COMMAND)
+    ipcMain.removeAllListeners(IPC.OVERLAY_COMMAND_CLOSE)
     ipcMain.removeAllListeners(IPC.OVERLAY_SET_IGNORE)
     ipcMain.removeAllListeners(IPC.SIDEBAR_PEEK_OPEN)
     ipcMain.removeAllListeners(IPC.SIDEBAR_PEEK_CLOSE)

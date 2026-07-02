@@ -40,7 +40,9 @@ export class TabManager {
 
   constructor(
     private readonly window: BrowserWindow,
-    private readonly emitPatch: EmitPatch
+    private readonly emitPatch: EmitPatch,
+    /** Ouvre la palette de commande (Ctrl+T depuis une page ayant le focus). */
+    private readonly onCommandShortcut: () => void = () => {}
   ) {
     // Recalcul des bounds coalescé (une source unique : le Main).
     this.boundsCoalescer = new FrameCoalescer(() => this.applyBoundsNow(), 16)
@@ -174,6 +176,11 @@ export class TabManager {
       if (isDevToolsShortcut(input)) {
         event.preventDefault()
         this.toggleDevTools()
+      } else if (isNewTabShortcut(input)) {
+        // Ctrl+T frappé alors qu'une page a le focus : la palette vit dans l'overlay, pas dans
+        // cette WebContentsView → on capture ici et on délègue au runtime pour l'ouvrir.
+        event.preventDefault()
+        this.onCommandShortcut()
       }
     })
 
@@ -372,6 +379,12 @@ function isDevToolsShortcut(input: Electron.Input): boolean {
   if (input.type !== 'keyDown') return false
   if (input.key === 'F12') return true
   return input.control && input.shift && input.key.toLowerCase() === 'i'
+}
+
+/** Détecte Ctrl+T (keydown) pour ouvrir la palette de commande. */
+function isNewTabShortcut(input: Electron.Input): boolean {
+  if (input.type !== 'keyDown') return false
+  return input.control && !input.shift && !input.alt && input.key.toLowerCase() === 't'
 }
 
 /**

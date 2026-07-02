@@ -99,11 +99,14 @@ export const IPC = {
   OVERLAY_SET_IGNORE: 'overlay:setIgnore', // overlay -> Main : capter/laisser passer la souris
   SIDEBAR_PEEK_OPEN: 'sidebar:peekOpen', // main -> Main : survol du bord gauche
   SIDEBAR_PEEK_CLOSE: 'sidebar:peekClose', // overlay -> Main : souris sortie du panneau
+  OVERLAY_COMMAND: 'overlay:command', // main/Main -> Main : ouvrir la palette de commande
+  OVERLAY_COMMAND_CLOSE: 'overlay:commandClose', // overlay -> Main : fermer la palette
   WINDOW_MINIMIZE: 'window:minimize',
   WINDOW_MAXIMIZE: 'window:maximize',
   WINDOW_CLOSE: 'window:close',
   // Main -> Renderer (events)
   OVERLAY_SITE_CONTROL_DATA: 'overlay:siteControlData', // Main -> overlay : push données (ou null)
+  OVERLAY_COMMAND_DATA: 'overlay:commandData', // Main -> overlay : ouvrir/fermer la palette (ou null)
   SIDEBAR_PEEK_STATE: 'sidebar:peekState', // Main -> overlay : ouverture/fermeture animée
   TAB_UPDATED: 'tab:updated',
   TAB_CREATED: 'tab:created',
@@ -144,4 +147,19 @@ export interface SidebarPeekState {
   open: boolean
   /** Largeur courante de la sidebar (px) pour dimensionner le panneau. */
   width: number
+}
+
+/** Contexte d'ouverture de la palette de commande (façon Arc). */
+export type CommandMode = 'newTab' | 'currentTab'
+
+/**
+ * Payload d'ouverture de la palette de commande transmis à la couche d'overlay.
+ * `mode` décide le comportement d'Entrée sur une URL/recherche : `newTab` (Ctrl+T, « Nouvel
+ * onglet ») crée un onglet ; `currentTab` (clic sur l'URL) navigue l'onglet actif.
+ */
+export interface CommandPalettePayload {
+  mode: CommandMode
+  activeId: string | null
+  /** Texte pré-rempli dans le champ (ex. l'URL courante quand on clique dessus). */
+  initialQuery?: string
 }
