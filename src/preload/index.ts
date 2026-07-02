@@ -8,6 +8,7 @@ import {
   type CreateTabInput,
   type SidebarIntent,
   type UiPersistState,
+  type UiSyncState,
   type WindowState,
   type SiteControlPayload,
   type SidebarPeekState,
@@ -79,6 +80,9 @@ const prism = {
   onTabUpdated: (cb: (batch: TabUpdateBatch) => void): (() => void) =>
     subscribe(IPC.TAB_UPDATED, cb),
   onTabCreated: (cb: (tab: TabState) => void): (() => void) => subscribe(IPC.TAB_CREATED, cb),
+  onTabClosed: (cb: (id: string) => void): (() => void) => subscribe(IPC.TAB_CLOSED, cb),
+  onUiStateSync: (cb: (sync: UiSyncState) => void): (() => void) =>
+    subscribe(IPC.UI_STATE_SYNC, cb),
   onWindowState: (cb: (state: WindowState) => void): (() => void) => subscribe(IPC.WINDOW_STATE, cb)
 }
 

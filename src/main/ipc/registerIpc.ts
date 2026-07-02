@@ -6,6 +6,7 @@ import {
   type CreateTabInput,
   type SidebarIntent,
   type UiPersistState,
+  type UiSyncState,
   type SiteControlPayload,
   type CommandPalettePayload
 } from '@shared/types'
@@ -167,6 +168,13 @@ export function setupBrowser(window: BrowserWindow, initialSession: SessionData)
   }
 
   const overlay = new OverlayLayer(window)
+
+  /** Diffuse un event aux DEUX fenêtres (principale + overlay) pour les garder synchronisées. */
+  const broadcast = (channel: string, payload: unknown): void => {
+    if (!window.isDestroyed()) window.webContents.send(channel, payload)
+    overlay.forward(channel, payload)
+  }
+
   const tabManager = new TabManager(
     window,
     emitPatch,
@@ -200,15 +208,17 @@ export function setupBrowser(window: BrowserWindow, initialSession: SessionData)
 
   ipcMain.handle(IPC.TAB_CREATE, (_e, input: CreateTabInput) => {
     const meta = tabManager.createTab(input ?? {})
-    // Diffusion à la fenêtre principale : c'est la SEULE source qui ajoute l'onglet au store UI
+    // Diffusion aux DEUX fenêtres : c'est la SEULE source qui ajoute l'onglet au store UI
     // (peu importe l'initiateur — sidebar, favori, ou palette de commande dans l'overlay).
-    if (!window.isDestroyed()) window.webContents.send(IPC.TAB_CREATED, meta)
+    broadcast(IPC.TAB_CREATED, meta)
     persist()
     return meta
   })
 
   ipcMain.on(IPC.TAB_CLOSE, (_e, id: string) => {
     tabManager.closeTab(id)
+    // Diffusion aux DEUX fenêtres : chacune retire l'onglet de son store (idempotent).
+    broadcast(IPC.TAB_CLOSED, id)
     persist()
   })
   ipcMain.on(IPC.TAB_ACTIVATE, (_e, id: string) => {
@@ -253,15 +263,34 @@ export function setupBrowser(window: BrowserWindow, initialSession: SessionData)
   ipcMain.on(IPC.SIDEBAR_PEEK_OPEN, () => overlay.openPeek(session.sidebarWidth))
   ipcMain.on(IPC.SIDEBAR_PEEK_CLOSE, () => overlay.closePeek())
 
-  ipcMain.on(IPC.SESSION_SAVE_UI, (_e, ui: UiPersistState) => {
+  ipcMain.on(IPC.SESSION_SAVE_UI, (event, ui: UiPersistState) => {
     session.order = ui.order
     session.pinnedTabIds = ui.pinnedTabIds
     session.folders = ui.folders
     session.pinnedApps = ui.pinnedApps
     session.activeTabId = ui.activeTabId
-    session.sidebarWidth = ui.sidebarWidth
-    session.sidebarCollapsed = ui.sidebarCollapsed
+    // La largeur/repli de la sidebar sont propres à la fenêtre principale : l'overlay (qui
+    // ne rend pas le toggle) ne doit jamais les écraser avec ses valeurs par défaut.
+    if (event.sender.id === window.webContents.id) {
+      session.sidebarWidth = ui.sidebarWidth
+      session.sidebarCollapsed = ui.sidebarCollapsed
+    }
     persist()
+
+    // Rediffusion de l'état organisationnel à l'AUTRE fenêtre pour les garder convergentes.
+    const sync: UiSyncState = {
+      order: session.order,
+      pinnedTabIds: session.pinnedTabIds,
+      folders: session.folders,
+      pinnedApps: session.pinnedApps,
+      activeTabId: session.activeTabId
+    }
+    if (!window.isDestroyed() && window.webContents.id !== event.sender.id) {
+      window.webContents.send(IPC.UI_STATE_SYNC, sync)
+    }
+    if (overlay.webContentsId !== null && overlay.webContentsId !== event.sender.id) {
+      overlay.forward(IPC.UI_STATE_SYNC, sync)
+    }
   })
 
   // --- Contrôles de fenêtre (frameless) ---

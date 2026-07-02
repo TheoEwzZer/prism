@@ -10,6 +10,8 @@ import { useTabsStore } from '@/store/tabsStore'
 export function useTabEvents(): void {
   const applyBatch = useTabsStore((s) => s.applyBatch)
   const addTab = useTabsStore((s) => s.addTab)
+  const removeTab = useTabsStore((s) => s.removeTab)
+  const applyRemoteUi = useTabsStore((s) => s.applyRemoteUi)
   const lastBatchId = useRef(0)
 
   useEffect(() => {
@@ -21,7 +23,12 @@ export function useTabEvents(): void {
     return unsubscribe
   }, [applyBatch])
 
-  // Création d'onglet (quelle que soit l'origine : sidebar, favori, palette de commande). Le
-  // Main est la source unique qui diffuse la meta ; on l'ajoute au store (idempotent).
+  // Création / fermeture d'onglet (quelle que soit l'origine : sidebar, favori, palette). Le
+  // Main est la source unique qui diffuse aux deux fenêtres ; on met à jour le store (idempotent).
   useEffect(() => window.prism.onTabCreated(addTab), [addTab])
+  useEffect(() => window.prism.onTabClosed(removeTab), [removeTab])
+
+  // Convergence de l'état organisationnel (ordre, favoris, dossiers, onglet actif) rediffusé
+  // par le Main depuis l'AUTRE fenêtre (principale ↔ overlay). Anti-écho géré dans le store.
+  useEffect(() => window.prism.onUiStateSync(applyRemoteUi), [applyRemoteUi])
 }

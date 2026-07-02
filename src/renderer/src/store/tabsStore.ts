@@ -5,8 +5,25 @@ import type {
   PinnedApp,
   SessionData,
   TabPatch,
-  UiPersistState
+  UiPersistState,
+  UiSyncState
 } from '@shared/types'
+
+/**
+ * Vrai pendant l'application d'un état organisationnel reçu d'une AUTRE fenêtre (via le Main).
+ * `usePersistUiState` l'inspecte pour ne pas renvoyer ce même état au Main (anti-écho / boucle).
+ * Zustand exécute les listeners de façon synchrone pendant `set`, donc le flag est vu à temps.
+ */
+let applyingRemote = false
+export const isApplyingRemoteUi = (): boolean => applyingRemote
+
+/** Égalité de contenu de deux tableaux d'ids (réutilisation de ref → évite les re-renders). */
+function sameIds(a: string[], b: string[]): boolean {
+  if (a === b) return true
+  if (a.length !== b.length) return false
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false
+  return true
+}
 
 /**
  * Store UI (control layer). Ne contient QUE de l'état d'interface — le "browser state"
@@ -42,6 +59,8 @@ interface TabsState {
    * favoris vient de `pinnedIds`), le reste (enfants de dossiers, favoris) conservé derrière.
    */
   commitLists: (fav: string[], cur: string[]) => void
+  /** Applique un état organisationnel reçu d'une autre fenêtre (via le Main). Anti-écho. */
+  applyRemoteUi: (sync: UiSyncState) => void
   /** Snapshot sérialisable pour la persistance côté Main. */
   toPersist: () => UiPersistState
 }
@@ -146,6 +165,32 @@ export const useTabsStore = create<TabsState>((set, get) => ({
       const rest = state.order.filter((id) => !curSet.has(id))
       return { pinnedIds: fav, order: [...cur, ...rest] }
     })
+  },
+
+  applyRemoteUi: (sync): void => {
+    applyingRemote = true
+    try {
+      set((state) => {
+        // On ne conserve que des ids d'onglets réellement présents dans CETTE fenêtre.
+        let order = sync.order.filter((id) => state.tabs[id])
+        for (const id of Object.keys(state.tabs)) if (!order.includes(id)) order.push(id)
+        let pinnedIds = sync.pinnedTabIds.filter(
+          (id) => state.tabs[id] && state.tabs[id].parentFolderId === null
+        )
+        // Réutilise les refs si le contenu est identique (aucun re-render inutile).
+        if (sameIds(order, state.order)) order = state.order
+        if (sameIds(pinnedIds, state.pinnedIds)) pinnedIds = state.pinnedIds
+        return {
+          order,
+          pinnedIds,
+          folders: sync.folders,
+          pinnedApps: sync.pinnedApps,
+          activeTabId: sync.activeTabId
+        }
+      })
+    } finally {
+      applyingRemote = false
+    }
   },
 
   toPersist: (): UiPersistState => {

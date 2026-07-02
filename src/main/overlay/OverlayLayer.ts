@@ -112,6 +112,11 @@ export class OverlayLayer {
     if (this.win && !this.win.isDestroyed()) this.win.webContents.send(channel, payload)
   }
 
+  /** Id des webContents de l'overlay (pour ne pas lui réémettre ce qu'il vient d'envoyer). */
+  get webContentsId(): number | null {
+    return this.win && !this.win.isDestroyed() ? this.win.webContents.id : null
+  }
+
   private send(channel: string, payload: unknown): void {
     if (this.win && !this.win.isDestroyed() && this.ready) {
       this.win.webContents.send(channel, payload)

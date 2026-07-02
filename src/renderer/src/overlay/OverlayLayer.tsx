@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useTabsStore } from '@/store/tabsStore'
 import { useTabEvents } from '@/hooks/useTabEvents'
+import { usePersistUiState } from '@/hooks/useSession'
 import type { SiteControlPayload, SidebarPeekState, CommandPalettePayload } from '@shared/types'
 import { PeekSidebar } from './PeekSidebar'
 import { SiteControlPopover } from './SiteControlPopover'
@@ -20,15 +21,20 @@ const PEEK_ARM_MS = 150
  */
 export function OverlayLayer(): React.JSX.Element {
   const hydrate = useTabsStore((s) => s.hydrate)
+  const [ready, setReady] = useState(false)
   const [peek, setPeek] = useState<SidebarPeekState>({ open: false, width: 256 })
   const [site, setSite] = useState<SiteControlPayload | null>(null)
   const [command, setCommand] = useState<CommandPalettePayload | null>(null)
 
-  useTabEvents() // patchs relayés par le Main → sidebar toujours à jour
+  useTabEvents() // patchs + convergence de l'état organisationnel relayés par le Main
+  usePersistUiState(ready) // le peek est pleinement fonctionnel : ses changements remontent au Main
 
   // Hydratation initiale (snapshot de session), sans réveiller d'onglet (overlay passif).
   useEffect(() => {
-    window.prism.getSession().then(hydrate)
+    window.prism.getSession().then((session) => {
+      hydrate(session)
+      setReady(true)
+    })
   }, [hydrate])
 
   useEffect(() => window.prism.onSidebarPeekState(setPeek), [])

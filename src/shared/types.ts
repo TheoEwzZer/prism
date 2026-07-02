@@ -72,6 +72,19 @@ export interface UiPersistState {
   sidebarCollapsed: boolean
 }
 
+/**
+ * Sous-ensemble « organisationnel » de l'état UI rediffusé par le Main à TOUTES les fenêtres
+ * (principale + overlay) pour les garder convergentes (réordonnancement, épinglage, dossiers,
+ * onglet actif). Exclut la sidebar (width/collapsed), propre à la fenêtre principale.
+ */
+export interface UiSyncState {
+  order: string[]
+  pinnedTabIds: string[]
+  folders: FolderState[]
+  pinnedApps: PinnedApp[]
+  activeTabId: string | null
+}
+
 /** Intention de layout envoyée par le Renderer (jamais de pixels de bounds bruts). */
 export interface SidebarIntent {
   width: number
@@ -114,6 +127,7 @@ export const IPC = {
   OVERLAY_SITE_CONTROL_DATA: 'overlay:siteControlData', // Main -> overlay : push données (ou null)
   OVERLAY_COMMAND_DATA: 'overlay:commandData', // Main -> overlay : ouvrir/fermer la palette (ou null)
   SIDEBAR_PEEK_STATE: 'sidebar:peekState', // Main -> overlay : ouverture/fermeture animée
+  UI_STATE_SYNC: 'ui:stateSync', // Main -> autres fenêtres : convergence de l'état organisationnel
   TAB_UPDATED: 'tab:updated',
   TAB_CREATED: 'tab:created',
   TAB_CLOSED: 'tab:closed',
