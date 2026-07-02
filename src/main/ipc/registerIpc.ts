@@ -185,6 +185,7 @@ export function setupBrowser(window: BrowserWindow, initialSession: SessionData)
       folders: session.folders,
       pinnedApps: session.pinnedApps,
       order: session.order,
+      pinnedTabIds: session.pinnedTabIds,
       activeTabId: tabManager.getActiveTabId() ?? session.activeTabId,
       sidebarWidth: session.sidebarWidth,
       sidebarCollapsed: session.sidebarCollapsed
@@ -254,6 +255,7 @@ export function setupBrowser(window: BrowserWindow, initialSession: SessionData)
 
   ipcMain.on(IPC.SESSION_SAVE_UI, (_e, ui: UiPersistState) => {
     session.order = ui.order
+    session.pinnedTabIds = ui.pinnedTabIds
     session.folders = ui.folders
     session.pinnedApps = ui.pinnedApps
     session.activeTabId = ui.activeTabId

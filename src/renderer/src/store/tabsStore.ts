@@ -19,6 +19,9 @@ import type {
 interface TabsState {
   tabs: Record<string, TabState>
   order: string[]
+  /** Onglets « favoris » (épinglés), dans l'ordre de la liste de favoris. Source de vérité de
+   *  l'appartenance ET de l'ordre des favoris ; les onglets « actuels » = racine ∉ pinnedIds. */
+  pinnedIds: string[]
   folders: FolderState[]
   pinnedApps: PinnedApp[]
   activeTabId: string | null
@@ -33,6 +36,12 @@ interface TabsState {
   setActive: (id: string) => void
   toggleFolder: (id: string) => void
   setSidebarCollapsed: (collapsed: boolean) => void
+  /**
+   * Commit d'un déplacement drag & drop : réécrit la liste des favoris (`fav`) et l'ordre des
+   * onglets actuels (`cur`). `order` est reconstruit avec les actuels en tête (l'ordre des
+   * favoris vient de `pinnedIds`), le reste (enfants de dossiers, favoris) conservé derrière.
+   */
+  commitLists: (fav: string[], cur: string[]) => void
   /** Snapshot sérialisable pour la persistance côté Main. */
   toPersist: () => UiPersistState
 }
@@ -40,6 +49,7 @@ interface TabsState {
 export const useTabsStore = create<TabsState>((set, get) => ({
   tabs: {},
   order: [],
+  pinnedIds: [],
   folders: [],
   pinnedApps: [],
   activeTabId: null,
@@ -52,9 +62,14 @@ export const useTabsStore = create<TabsState>((set, get) => ({
     // On ne conserve dans `order` que des ids d'onglets réellement présents.
     const order = session.order.filter((id) => tabs[id])
     for (const id of Object.keys(tabs)) if (!order.includes(id)) order.push(id)
+    // Favoris : uniquement des onglets racine réellement présents (défensif).
+    const pinnedIds = (session.pinnedTabIds ?? []).filter(
+      (id) => tabs[id] && tabs[id].parentFolderId === null
+    )
     set({
       tabs,
       order,
+      pinnedIds,
       folders: session.folders,
       pinnedApps: session.pinnedApps,
       activeTabId: session.activeTabId,
@@ -102,12 +117,15 @@ export const useTabsStore = create<TabsState>((set, get) => ({
       const tabs = { ...state.tabs }
       delete tabs[id]
       const order = state.order.filter((tid) => tid !== id)
+      const pinnedIds = state.pinnedIds.includes(id)
+        ? state.pinnedIds.filter((tid) => tid !== id)
+        : state.pinnedIds
       let activeTabId = state.activeTabId
       if (activeTabId === id) {
         const idx = state.order.indexOf(id)
         activeTabId = order[Math.min(idx, order.length - 1)] ?? null
       }
-      return { tabs, order, activeTabId }
+      return { tabs, order, pinnedIds, activeTabId }
     })
   },
 
@@ -121,10 +139,20 @@ export const useTabsStore = create<TabsState>((set, get) => ({
 
   setSidebarCollapsed: (collapsed): void => set({ sidebarCollapsed: collapsed }),
 
+  commitLists: (fav, cur): void => {
+    set((state) => {
+      // `order` : actuels en tête, puis le reste (favoris + enfants de dossiers) tel quel.
+      const curSet = new Set(cur)
+      const rest = state.order.filter((id) => !curSet.has(id))
+      return { pinnedIds: fav, order: [...cur, ...rest] }
+    })
+  },
+
   toPersist: (): UiPersistState => {
     const s = get()
     return {
       order: s.order,
+      pinnedTabIds: s.pinnedIds,
       folders: s.folders,
       pinnedApps: s.pinnedApps,
       activeTabId: s.activeTabId,

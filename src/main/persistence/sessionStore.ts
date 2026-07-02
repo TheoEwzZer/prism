@@ -20,6 +20,7 @@ const DEFAULT_SESSION: SessionData = {
     { id: 'pin-gpt', name: 'ChatGPT', url: 'https://chat.openai.com', favicon: null }
   ],
   order: [],
+  pinnedTabIds: [],
   activeTabId: null,
   sidebarWidth: 256,
   sidebarCollapsed: false

@@ -1,7 +1,21 @@
 import { memo } from 'react'
 import { X, Globe, Loader2, Moon } from 'lucide-react'
+import type { DraggableAttributes } from '@dnd-kit/core'
+import type { SyntheticListenerMap } from '@dnd-kit/core/dist/hooks/utilities'
 import { cn } from '@/lib/utils'
 import { useTabsStore } from '@/store/tabsStore'
+
+/**
+ * Liaison drag & drop injectée par le wrapper sortable (`SortableTab`). Optionnelle : les
+ * enfants de dossiers rendent un `TabItem` sans drag.
+ */
+export interface TabDragBind {
+  setNodeRef: (el: HTMLElement | null) => void
+  attributes: DraggableAttributes
+  listeners: SyntheticListenerMap | undefined
+  style: React.CSSProperties
+  isDragging: boolean
+}
 
 /**
  * Un onglet vertical de la sidebar.
@@ -10,7 +24,13 @@ import { useTabsStore } from '@/store/tabsStore'
  * ne re-render que l'icône ; réordonner la liste (`order`) ne re-render aucun `TabItem`.
  * Mémoïsé pour ignorer les re-renders du parent qui ne changent pas la prop `id`.
  */
-export const TabItem = memo(function TabItem({ id }: { id: string }): React.JSX.Element | null {
+export const TabItem = memo(function TabItem({
+  id,
+  drag
+}: {
+  id: string
+  drag?: TabDragBind
+}): React.JSX.Element | null {
   const title = useTabsStore((s) => s.tabs[id]?.title)
   const favicon = useTabsStore((s) => s.tabs[id]?.favicon)
   const isLoading = useTabsStore((s) => s.tabs[id]?.isLoading)
@@ -36,11 +56,16 @@ export const TabItem = memo(function TabItem({ id }: { id: string }): React.JSX.
 
   return (
     <div
+      ref={drag?.setNodeRef}
+      style={drag?.style}
       onClick={activate}
+      {...drag?.attributes}
+      {...drag?.listeners}
       className={cn(
         'group flex h-8 cursor-default items-center gap-2 rounded-lg px-2 text-sm',
         'transition-colors',
-        isActive ? 'bg-white/10 text-white' : 'text-slate-300 hover:bg-white/5'
+        isActive ? 'bg-white/10 text-white' : 'text-slate-300 hover:bg-white/5',
+        drag?.isDragging && 'opacity-40'
       )}
     >
       <span className="flex size-4 shrink-0 items-center justify-center">
@@ -62,6 +87,9 @@ export const TabItem = memo(function TabItem({ id }: { id: string }): React.JSX.
       <button
         aria-label="Fermer l'onglet"
         onClick={close}
+        // Empêche le drag de démarrer quand on clique la croix (le pointer-down remonterait
+        // sinon aux listeners du row et lancerait un tri).
+        onPointerDown={(e) => e.stopPropagation()}
         className="flex size-5 shrink-0 items-center justify-center rounded opacity-0 transition-opacity group-hover:opacity-100 hover:bg-white/15"
       >
         <X className="size-3.5" />

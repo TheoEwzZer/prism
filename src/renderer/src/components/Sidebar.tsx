@@ -1,7 +1,7 @@
 import { useTabsStore } from '@/store/tabsStore'
 import { cn } from '@/lib/utils'
 import { PinnedApps } from './PinnedApps'
-import { TabList } from './TabList'
+import { SidebarTabs } from './SidebarTabs'
 
 /**
  * Barre latérale gauche (style Arc). La navigation (paramètres, toggle, back/forward/reload,
@@ -27,7 +27,7 @@ export function Sidebar(): React.JSX.Element {
     >
       <div style={{ width }} className="flex h-full min-w-0 flex-col pt-1 text-sidebar-foreground">
         <PinnedApps />
-        <TabList />
+        <SidebarTabs />
       </div>
     </aside>
   )

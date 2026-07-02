@@ -45,6 +45,8 @@ export interface SessionData {
   pinnedApps: PinnedApp[]
   /** Ordre d'affichage des onglets (ids) au niveau racine + dans les dossiers. */
   order: string[]
+  /** Onglets « favoris » (épinglés), dans l'ordre de la liste de favoris de la sidebar. */
+  pinnedTabIds: string[]
   activeTabId: string | null
   sidebarWidth: number
   sidebarCollapsed: boolean
@@ -62,6 +64,7 @@ export interface TabUpdateBatch {
 /** État "organisationnel" (UI) que le Renderer pousse au Main pour la persistance. */
 export interface UiPersistState {
   order: string[]
+  pinnedTabIds: string[]
   folders: FolderState[]
   pinnedApps: PinnedApp[]
   activeTabId: string | null
