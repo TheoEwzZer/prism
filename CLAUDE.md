@@ -24,6 +24,7 @@ Il n'y a **pas de framework de tests** dans ce dépôt. La vérification pré-co
 ## Architecture
 
 Trois espaces sous `src/`, avec des alias de résolution distincts (voir `electron.vite.config.ts`) :
+
 - `src/main/` — process Main Electron.
 - `src/preload/` — bridge sécurisé (`@shared` dispo).
 - `src/renderer/src/` — UI React (alias `@`, `@renderer`, `@shared`).
@@ -33,7 +34,7 @@ Trois espaces sous `src/`, avec des alias de résolution distincts (voir `electr
 
 Le moteur de rendu de chaque onglet est une `WebContentsView` **native** peinte par-dessus le DOM React, par le Main. Ce choix conditionne toute l'architecture :
 
-- **Le Main est la SEULE source de vérité du layout/bounds.** Le Renderer n'émet que des *intentions* (`SidebarIntent = { width, collapsed }`), jamais de pixels bruts. Les bounds réels de la vue sont calculés dans `TabManager.computeBounds()` et appliqués côté Main. Toute UI qui doit apparaître au-dessus de la page web (barre supérieure, contrôles) doit vivre dans le chrome React **hors** de la zone recouverte par la vue native — d'où la `TopBar` pleine largeur et la vue web qui démarre à l'offset `TOPBAR_HEIGHT = 44` (à garder synchronisé avec la classe `h-11` de `TopBar.tsx`).
+- **Le Main est la SEULE source de vérité du layout/bounds.** Le Renderer n'émet que des _intentions_ (`SidebarIntent = { width, collapsed }`), jamais de pixels bruts. Les bounds réels de la vue sont calculés dans `TabManager.computeBounds()` et appliqués côté Main. Toute UI qui doit apparaître au-dessus de la page web (barre supérieure, contrôles) doit vivre dans le chrome React **hors** de la zone recouverte par la vue native — d'où la `TopBar` pleine largeur et la vue web qui démarre à l'offset `TOPBAR_HEIGHT = 44` (à garder synchronisé avec la classe `h-11` de `TopBar.tsx`).
 - **Séparation des états.** Le Main détient le « browser state » (navigation réelle, WebContentsView, bounds). Le Renderer/Zustand ne détient que du « UI state » (titre, favicon, loading, ordre, dossiers, onglet actif, sidebar). Ne pas dupliquer l'un dans l'autre.
 - **Fenêtre frameless.** `frame: false` dans `src/main/index.ts` ; les contrôles min/max/close sont des boutons React qui parlent au Main via IPC (`WINDOW_*`).
 - **Menu applicatif désactivé** (`Menu.setApplicationMenu(null)`) pour éviter les accélérateurs par défaut ; F12 / Ctrl+Shift+I sont interceptés dans `TabManager` via `before-input-event`.
