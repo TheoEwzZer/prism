@@ -112,15 +112,13 @@ export const IPC = {
   SIDEBAR_PEEK_CLOSE: 'sidebar:peekClose', // overlay -> Main : souris sortie du panneau
   OVERLAY_COMMAND: 'overlay:command', // main/Main -> Main : ouvrir la palette de commande
   OVERLAY_COMMAND_CLOSE: 'overlay:commandClose', // overlay -> Main : fermer la palette
-  OVERLAY_HISTORY: 'overlay:history', // main/Main -> Main : basculer la page Historique (Ctrl+H)
-  OVERLAY_HISTORY_CLOSE: 'overlay:historyClose', // overlay -> Main : fermer la page Historique
   WINDOW_MINIMIZE: 'window:minimize',
   WINDOW_MAXIMIZE: 'window:maximize',
   WINDOW_CLOSE: 'window:close',
   // Main -> Renderer (events)
   OVERLAY_SITE_CONTROL_DATA: 'overlay:siteControlData', // Main -> overlay : push données (ou null)
   OVERLAY_COMMAND_DATA: 'overlay:commandData', // Main -> overlay : ouvrir/fermer la palette (ou null)
-  OVERLAY_HISTORY_DATA: 'overlay:historyData', // Main -> overlay : ouvrir/fermer la page Historique
+  HISTORY_OPEN: 'history:open', // Main -> Renderer : ouvrir/focus l'onglet prism://history/ (Ctrl+H)
   SIDEBAR_PEEK_STATE: 'sidebar:peekState', // Main -> overlay : ouverture/fermeture animée
   SIDEBAR_TOGGLE_MASK: 'sidebar:toggleMask', // Main -> overlay : masque animé du repli/dépli sidebar
   UI_STATE_SYNC: 'ui:stateSync', // Main -> autres fenêtres : convergence de l'état organisationnel
@@ -238,4 +236,26 @@ export interface HistoryListResult {
   items: VisitEntry[]
   /** Reste-t-il des visites au-delà de cette page (pour le défilement infini) ? */
   hasMore: boolean
+}
+
+// ---------------------------------------------------------------------------
+// Pages internes (prism://…)
+//
+// Une page interne est un onglet SANS `WebContentsView` : le Main masque la vue native et le
+// chrome React (WebViewArea) rend le composant correspondant. Cf. principe fondateur (vue native
+// au-dessus du DOM React) — une page interne est du pur UI state, donc rendue par le Renderer.
+// ---------------------------------------------------------------------------
+
+/** URL canonique de la page Historique (Ctrl+H). */
+export const HISTORY_URL = 'prism://history/'
+
+/** Vrai si l'URL désigne une page interne Prism (rendue par le chrome React, pas de vue native). */
+export function isInternalUrl(url: string): boolean {
+  return /^prism:\/\//i.test(url)
+}
+
+/** Titre affiché (sidebar / Omnibox) d'une page interne. */
+export function internalPageTitle(url: string): string {
+  if (/^prism:\/\/history/i.test(url)) return 'Historique'
+  return 'Prism'
 }

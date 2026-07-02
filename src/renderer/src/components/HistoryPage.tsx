@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { useTabsStore } from '@/store/tabsStore'
 import type { VisitEntry } from '@shared/types'
 
 /** Taille d'une page chargée (défilement infini). */
@@ -54,10 +55,11 @@ interface DayGroup {
 }
 
 /**
- * Page Historique plein écran (Ctrl+H, façon Arc), rendue DANS la couche d'overlay native
- * au-dessus de la page web. Visites groupées par jour, avec heure, filtre plein texte, défilement
- * infini (pagination côté Main) et suppression (unitaire / par plage). Escape ou clic sur le fond
- * la ferment.
+ * Page Historique — onglet interne `prism://history/` (façon Arc). Rendue par le chrome React
+ * DANS la zone contenu (voir `WebViewArea`) : c'est une vraie page, pas une modal — l'onglet a une
+ * URL, apparaît dans la sidebar et se ferme comme n'importe quel onglet. Visites groupées par jour
+ * (heure affichée), filtre plein texte, défilement infini (pagination côté Main), sélection
+ * multiple (ouvrir / supprimer en lot) et effacement par plage.
  */
 export function HistoryPage(): React.JSX.Element {
   const [query, setQuery] = useState('')
@@ -79,8 +81,6 @@ export function HistoryPage(): React.JSX.Element {
   useEffect(() => {
     itemsRef.current = items
   }, [items])
-
-  const close = useCallback((): void => window.prism.closeHistory(), [])
 
   // Débounce du filtre.
   useEffect(() => {
@@ -138,25 +138,13 @@ export function HistoryPage(): React.JSX.Element {
     return () => io.disconnect()
   }, [loadMore])
 
-  // Escape ferme la page.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') {
-        e.preventDefault()
-        close()
-      }
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [close])
-
-  const openUrl = useCallback(
-    (url: string): void => {
-      window.prism.createTab({ url })
-      close()
-    },
-    [close]
-  )
+  // Clic sur une visite → on navigue l'onglet courant (l'onglet historique) vers le site : la page
+  // interne est alors remplacée par la vraie page (comportement « la page devient le site »).
+  const openUrl = useCallback((url: string): void => {
+    const activeId = useTabsStore.getState().activeTabId
+    if (activeId) window.prism.navigate(activeId, url)
+    else window.prism.createTab({ url })
+  }, [])
 
   const removeVisit = useCallback((id: string): void => {
     window.prism.removeVisit(id)
@@ -192,12 +180,12 @@ export function HistoryPage(): React.JSX.Element {
 
   const clearSelection = (): void => setSelected(new Set())
 
-  // Ouvre toutes les visites sélectionnées (URLs dédupliquées) en arrière-plan, puis ferme.
+  // Ouvre toutes les visites sélectionnées (URLs dédupliquées) dans de nouveaux onglets en arrière-plan.
   const openSelected = (): void => {
     const urls = new Set<string>()
     for (const v of items) if (selected.has(v.id)) urls.add(v.url)
     for (const url of urls) window.prism.createTab({ url, activate: false })
-    close()
+    clearSelection()
   }
 
   // Supprime toutes les visites sélectionnées.
@@ -225,105 +213,89 @@ export function HistoryPage(): React.JSX.Element {
   const empty = !loading && items.length === 0
 
   return (
-    <div
-      data-overlay-hit="history"
-      className="pointer-events-auto absolute inset-0 flex items-center justify-center bg-black/50 p-6 backdrop-blur-sm"
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) close()
-      }}
-    >
-      <div className="flex h-full max-h-[860px] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-white/10 bg-popover text-slate-200 shadow-2xl shadow-black/60">
-        {/* En-tête : titre + recherche + effacer + fermer */}
-        <div className="flex items-center gap-3 border-b border-white/10 px-5 py-3.5">
-          <Clock className="size-5 shrink-0 text-slate-400" />
-          <h1 className="shrink-0 text-base font-semibold">Historique</h1>
-          <div className="relative ml-2 flex-1">
-            <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-slate-500" />
-            <Input
-              autoFocus
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Filtrer l'historique…"
-              className="h-9 border-white/10 bg-white/5 pl-8 text-sm text-slate-200 placeholder:text-slate-500"
-            />
-          </div>
-
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button variant="ghost" size="sm" className="shrink-0 gap-1.5 text-slate-300">
-                <Trash2 className="size-4" />
-                Effacer
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent align="end" className="w-56 border-white/10 bg-popover p-1.5">
-              <ClearItem label="La dernière heure" onClick={() => clear(Date.now() - 3600_000)} />
-              <ClearItem label="Aujourd'hui" onClick={() => clear(startOfDay(Date.now()))} />
-              <ClearItem
-                label="Les 7 derniers jours"
-                onClick={() => clear(startOfDay(Date.now()) - 6 * DAY_MS)}
-              />
-              <ClearItem label="Tout l'historique" destructive onClick={() => clear()} />
-            </PopoverContent>
-          </Popover>
-
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            onClick={close}
-            aria-label="Fermer"
-            className="shrink-0 text-slate-400 hover:text-white"
-          >
-            <X className="size-4" />
-          </Button>
+    <div className="flex h-full w-full flex-col overflow-hidden bg-background text-slate-200">
+      {/* En-tête : titre + recherche + effacer */}
+      <header className="flex items-center gap-3 border-b border-white/10 px-6 py-4">
+        <Clock className="size-5 shrink-0 text-slate-400" />
+        <h1 className="shrink-0 text-lg font-semibold">Historique</h1>
+        <div className="relative mx-auto w-full max-w-md">
+          <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-slate-500" />
+          <Input
+            autoFocus
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Filtrer l'historique…"
+            className="h-9 border-white/10 bg-white/5 pl-8 text-sm text-slate-200 placeholder:text-slate-500"
+          />
         </div>
 
-        {/* Barre de sélection multiple (visible dès qu'une visite est cochée) */}
-        {selected.size > 0 && (
-          <div className="flex items-center gap-2 border-b border-white/10 bg-white/5 px-5 py-2">
-            <Checkbox
-              checked={selected.size === items.length ? true : 'indeterminate'}
-              onCheckedChange={toggleSelectAll}
-              aria-label="Tout sélectionner"
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button variant="ghost" size="sm" className="shrink-0 gap-1.5 text-slate-300">
+              <Trash2 className="size-4" />
+              Effacer
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent align="end" className="w-56 border-white/10 bg-popover p-1.5">
+            <ClearItem label="La dernière heure" onClick={() => clear(Date.now() - 3600_000)} />
+            <ClearItem label="Aujourd'hui" onClick={() => clear(startOfDay(Date.now()))} />
+            <ClearItem
+              label="Les 7 derniers jours"
+              onClick={() => clear(startOfDay(Date.now()) - 6 * DAY_MS)}
             />
-            <span className="text-sm text-slate-300">
-              {selected.size} sélectionné{selected.size > 1 ? 's' : ''}
-            </span>
-            <div className="ml-auto flex items-center gap-1.5">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={openSelected}
-                className="gap-1.5 text-slate-200"
-              >
-                <ExternalLink className="size-4" />
-                Ouvrir
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={removeSelected}
-                className="gap-1.5 text-red-400 hover:text-red-300"
-              >
-                <Trash2 className="size-4" />
-                Supprimer
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                onClick={clearSelection}
-                aria-label="Annuler la sélection"
-                className="text-slate-400 hover:text-white"
-              >
-                <X className="size-4" />
-              </Button>
-            </div>
-          </div>
-        )}
+            <ClearItem label="Tout l'historique" destructive onClick={() => clear()} />
+          </PopoverContent>
+        </Popover>
+      </header>
 
-        {/* Corps : liste groupée par jour, défilement infini */}
-        <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto px-2 py-2">
+      {/* Barre de sélection multiple (visible dès qu'une visite est cochée) */}
+      {selected.size > 0 && (
+        <div className="flex items-center gap-2 border-b border-white/10 bg-white/5 px-6 py-2">
+          <Checkbox
+            checked={selected.size === items.length ? true : 'indeterminate'}
+            onCheckedChange={toggleSelectAll}
+            aria-label="Tout sélectionner"
+          />
+          <span className="text-sm text-slate-300">
+            {selected.size} sélectionné{selected.size > 1 ? 's' : ''}
+          </span>
+          <div className="ml-auto flex items-center gap-1.5">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={openSelected}
+              className="gap-1.5 text-slate-200"
+            >
+              <ExternalLink className="size-4" />
+              Ouvrir
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={removeSelected}
+              className="gap-1.5 text-red-400 hover:text-red-300"
+            >
+              <Trash2 className="size-4" />
+              Supprimer
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={clearSelection}
+              aria-label="Annuler la sélection"
+              className="text-slate-400 hover:text-white"
+            >
+              <X className="size-4" />
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Corps : liste groupée par jour, défilement infini */}
+      <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto">
+        <div className="mx-auto w-full max-w-3xl px-2 py-3">
           {empty && (
-            <div className="flex h-full flex-col items-center justify-center gap-2 text-slate-500">
+            <div className="flex flex-col items-center justify-center gap-2 py-24 text-slate-500">
               <Clock className="size-8 opacity-40" />
               <p className="text-sm">
                 {debounced ? 'Aucun résultat.' : 'Aucun historique pour le moment.'}
@@ -333,7 +305,7 @@ export function HistoryPage(): React.JSX.Element {
 
           {groups.map((group) => (
             <section key={group.key} className="mb-1">
-              <h2 className="sticky top-0 z-10 bg-popover/95 px-3 py-2 text-xs font-semibold tracking-wide text-slate-400 backdrop-blur-sm">
+              <h2 className="sticky top-0 z-10 bg-background/95 px-3 py-2 text-xs font-semibold tracking-wide text-slate-400 backdrop-blur-sm">
                 {group.label}
               </h2>
               {group.items.map((v) => (

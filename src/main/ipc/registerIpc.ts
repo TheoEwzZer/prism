@@ -183,7 +183,11 @@ export function setupBrowser(window: BrowserWindow, initialSession: SessionData)
     window,
     emitPatch,
     () => overlay.toggleCommand({ mode: 'newTab', activeId: tabManager.getActiveTabId() }),
-    () => overlay.toggleHistory(),
+    () => {
+      // Ctrl+H depuis une page ayant le focus : on demande au chrome React d'ouvrir/focus l'onglet
+      // interne prism://history/ (la logique ouvrir-ou-focus vit côté Renderer, source de l'UI state).
+      if (!window.isDestroyed()) window.webContents.send(IPC.HISTORY_OPEN)
+    },
     { visit: recordVisit, updateMeta }
   )
 
@@ -277,8 +281,6 @@ export function setupBrowser(window: BrowserWindow, initialSession: SessionData)
     overlay.toggleCommand(payload)
   )
   ipcMain.on(IPC.OVERLAY_COMMAND_CLOSE, () => overlay.hideCommand())
-  ipcMain.on(IPC.OVERLAY_HISTORY, () => overlay.toggleHistory())
-  ipcMain.on(IPC.OVERLAY_HISTORY_CLOSE, () => overlay.hideHistory())
   ipcMain.on(IPC.OVERLAY_SET_IGNORE, (_e, ignore: boolean) => overlay.setIgnore(ignore))
   ipcMain.on(IPC.SIDEBAR_PEEK_OPEN, () => overlay.openPeek(session.sidebarWidth))
   ipcMain.on(IPC.SIDEBAR_PEEK_CLOSE, () => overlay.closePeek())
@@ -344,8 +346,6 @@ export function setupBrowser(window: BrowserWindow, initialSession: SessionData)
     ipcMain.removeAllListeners(IPC.HISTORY_REMOVE)
     ipcMain.removeAllListeners(IPC.HISTORY_REMOVE_VISIT)
     ipcMain.removeAllListeners(IPC.HISTORY_CLEAR)
-    ipcMain.removeAllListeners(IPC.OVERLAY_HISTORY)
-    ipcMain.removeAllListeners(IPC.OVERLAY_HISTORY_CLOSE)
     ipcMain.removeAllListeners(IPC.TAB_CLOSE)
     ipcMain.removeAllListeners(IPC.TAB_ACTIVATE)
     ipcMain.removeAllListeners(IPC.TAB_NAVIGATE)

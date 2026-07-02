@@ -55,15 +55,13 @@ const prism = {
   getSuggestions: (query: string): Promise<string[]> =>
     ipcRenderer.invoke(IPC.SUGGEST_QUERY, query),
 
-  // Page Historique (Ctrl+H)
+  // Page Historique (onglet interne prism://history/)
   listHistory: (input: HistoryListInput): Promise<HistoryListResult> =>
     ipcRenderer.invoke(IPC.HISTORY_LIST, input),
   removeVisit: (id: string): void => ipcRenderer.send(IPC.HISTORY_REMOVE_VISIT, id),
   clearHistory: (since?: number): void => ipcRenderer.send(IPC.HISTORY_CLEAR, since),
-  openHistory: (): void => ipcRenderer.send(IPC.OVERLAY_HISTORY),
-  closeHistory: (): void => ipcRenderer.send(IPC.OVERLAY_HISTORY_CLOSE),
-  onHistoryData: (cb: (open: boolean) => void): (() => void) =>
-    subscribe(IPC.OVERLAY_HISTORY_DATA, cb),
+  // Main -> Renderer : Ctrl+H frappé depuis une page → ouvrir/focus l'onglet historique.
+  onOpenHistory: (cb: () => void): (() => void) => subscribe(IPC.HISTORY_OPEN, cb),
 
   // Couche d'overlay unique (au-dessus de la page). Depuis la fenêtre principale :
   openSiteControl: (payload: SiteControlPayload): void =>

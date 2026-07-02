@@ -1,6 +1,12 @@
 import { BrowserWindow, WebContentsView, shell, type Rectangle } from 'electron'
 import { randomUUID } from 'crypto'
-import type { TabState, TabPatch, CreateTabInput } from '@shared/types'
+import {
+  isInternalUrl,
+  internalPageTitle,
+  type TabState,
+  type TabPatch,
+  type CreateTabInput
+} from '@shared/types'
 import { FrameCoalescer } from '../utils/scheduler'
 
 /** Réglages d'hibernation / layout (ajustables). */
@@ -115,10 +121,11 @@ export class TabManager {
   createTab(input: CreateTabInput): TabState {
     const id = randomUUID()
     const url = normalizeInput(input.url ?? '')
+    const internal = isInternalUrl(url)
     const meta: TabState = {
       id,
       url,
-      title: url ? 'Chargement…' : 'Nouvel onglet',
+      title: internal ? internalPageTitle(url) : url ? 'Chargement…' : 'Nouvel onglet',
       favicon: null,
       isLoading: false,
       canGoBack: false,
@@ -127,7 +134,8 @@ export class TabManager {
       parentFolderId: input.parentFolderId ?? null
     }
     this.tabs.set(id, { meta, view: null, lastActive: Date.now() })
-    this.ensureView(id)
+    // Page interne : aucune WebContentsView (rendue par le chrome React). Sinon, on crée la vue.
+    if (!internal) this.ensureView(id)
     if (input.activate !== false) this.activateTab(id)
     return meta
   }
@@ -140,6 +148,8 @@ export class TabManager {
   private ensureView(id: string): WebContentsView | null {
     const entry = this.tabs.get(id)
     if (!entry) return null
+    // Page interne : jamais de vue native (le chrome React la peint).
+    if (isInternalUrl(entry.meta.url)) return null
     if (entry.view && !entry.view.webContents.isDestroyed()) return entry.view
 
     const view = new WebContentsView({
@@ -192,8 +202,8 @@ export class TabManager {
         event.preventDefault()
         this.onCommandShortcut()
       } else if (isHistoryShortcut(input)) {
-        // Ctrl+H frappé alors qu'une page a le focus : idem, on délègue l'ouverture de la page
-        // Historique (rendue dans la couche d'overlay).
+        // Ctrl+H frappé alors qu'une page a le focus : on délègue au runtime l'ouverture/focus de
+        // l'onglet interne prism://history/ (le chrome React n'a pas reçu ce keydown).
         event.preventDefault()
         this.onHistoryShortcut()
       }
@@ -237,26 +247,43 @@ export class TabManager {
     }
   }
 
+  /** Masque la vue native d'un onglet (+ ferme son DevTools). No-op si page interne / hibernée. */
+  private hideView(id: string | null): void {
+    if (!id) return
+    const entry = this.tabs.get(id)
+    if (entry?.view && !entry.view.webContents.isDestroyed()) {
+      if (entry.view.webContents.isDevToolsOpened()) entry.view.webContents.closeDevTools()
+      entry.view.setVisible(false)
+    }
+  }
+
   /** Active un onglet : réveille sa vue, masque l'ancienne, gère le focus explicite. */
   activateTab(id: string): void {
     const entry = this.tabs.get(id)
     if (!entry) return
 
-    // Masquer l'ancienne vue active (+ fermer son DevTools natif s'il était ouvert).
-    // `WebContents` n'expose pas `blur()` : focus() sur la nouvelle vue (plus bas) retire
-    // implicitement le focus de l'ancienne, et setVisible(false) la sort du rendu.
-    if (this.activeTabId && this.activeTabId !== id) {
-      const prev = this.tabs.get(this.activeTabId)
-      if (prev?.view && !prev.view.webContents.isDestroyed()) {
-        if (prev.view.webContents.isDevToolsOpened()) prev.view.webContents.closeDevTools()
-        prev.view.setVisible(false)
+    // Masquer l'ancienne vue active. `WebContents` n'expose pas `blur()` : focus() sur la nouvelle
+    // vue (plus bas) retire implicitement le focus de l'ancienne, et setVisible(false) la sort du rendu.
+    if (this.activeTabId && this.activeTabId !== id) this.hideView(this.activeTabId)
+
+    this.activeTabId = id
+    entry.lastActive = Date.now()
+    // L'identité de la vue active a pu changer (interne↔normale, ou vue recréée) : on force le
+    // recompute des bounds (le garde `lastLayoutSig` ne voit sinon pas le changement de vue).
+    this.lastLayoutSig = null
+
+    // Page interne : aucune vue à afficher, le chrome React peint la zone contenu.
+    if (isInternalUrl(entry.meta.url)) {
+      if (entry.meta.isHibernated) {
+        entry.meta.isHibernated = false
+        this.emitPatch(id, { isHibernated: false })
       }
+      this.applyBoundsNow()
+      this.enforceHibernation()
+      return
     }
 
     const view = this.ensureView(id)
-    this.activeTabId = id
-    entry.lastActive = Date.now()
-
     if (view && !view.webContents.isDestroyed()) {
       // Le Main applique les bounds (source de vérité) avant d'afficher.
       this.applyBoundsNow()
@@ -297,8 +324,47 @@ export class TabManager {
     if (!entry) return
     const url = normalizeInput(input)
     entry.meta.url = url
+
+    // Navigation vers une page interne : on détruit la vue native de l'onglet (le chrome React
+    // prend le relais) et on remet la meta à plat.
+    if (isInternalUrl(url)) {
+      this.destroyView(entry)
+      Object.assign(entry.meta, {
+        title: internalPageTitle(url),
+        favicon: null,
+        isLoading: false,
+        canGoBack: false,
+        canGoForward: false,
+        isHibernated: false
+      })
+      this.emitPatch(id, {
+        url,
+        title: entry.meta.title,
+        favicon: null,
+        isLoading: false,
+        canGoBack: false,
+        canGoForward: false,
+        isHibernated: false
+      })
+      if (this.activeTabId === id) {
+        this.lastLayoutSig = null
+        this.applyBoundsNow()
+      }
+      return
+    }
+
+    // Navigation normale : crée la vue si besoin (ex. l'onglet était interne) et charge l'URL.
     const view = this.ensureView(id)
-    view?.webContents.loadURL(url).catch(() => this.emitPatch(id, { isLoading: false }))
+    if (!view || view.webContents.isDestroyed()) return
+    entry.meta.isLoading = true
+    view.webContents.loadURL(url).catch(() => this.emitPatch(id, { isLoading: false }))
+    // Si l'onglet actif redevient une vue native (interne→normale), il faut l'afficher.
+    if (this.activeTabId === id) {
+      this.lastLayoutSig = null
+      this.applyBoundsNow()
+      view.setVisible(true)
+      view.webContents.focus()
+    }
   }
 
   goBack(id: string): void {
@@ -422,6 +488,11 @@ function isNewTabShortcut(input: Electron.Input): boolean {
 function normalizeInput(raw: string): string {
   const input = raw.trim()
   if (!input) return ''
+  // Page interne prism:// → canonicalisée avec un slash final (ex. `prism://history` → `prism://history/`).
+  if (/^prism:\/\//i.test(input)) {
+    const rest = input.replace(/^prism:\/\//i, '').replace(/\/+$/, '')
+    return `prism://${rest.toLowerCase()}/`
+  }
   if (/^https?:\/\//i.test(input) || input.startsWith('about:')) return input
   // Domaine "brut" (contient un point sans espace) → https://
   if (/^[^\s]+\.[^\s]+$/.test(input) && !input.includes(' ')) return `https://${input}`

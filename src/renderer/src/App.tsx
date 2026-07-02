@@ -7,6 +7,23 @@ import { useTabEvents } from './hooks/useTabEvents'
 import { useSidebarLayout } from './hooks/useSidebarLayout'
 import { useSession, usePersistUiState } from './hooks/useSession'
 import { useTabsStore } from './store/tabsStore'
+import { HISTORY_URL } from '@shared/types'
+
+/**
+ * Ouvre l'onglet interne `prism://history/` s'il n'existe pas déjà, sinon l'active (pas de doublon).
+ * La logique vit côté Renderer car l'onglet actif est du UI state. Créer un onglet passe par le Main
+ * (invoke `createTab`) qui rediffuse `tab:created` → le store l'ajoute ET le rend actif.
+ */
+function openOrFocusHistory(): void {
+  const state = useTabsStore.getState()
+  const existing = Object.keys(state.tabs).find((id) => state.tabs[id]?.url === HISTORY_URL)
+  if (existing) {
+    state.setActive(existing)
+    window.prism.activateTab(existing)
+  } else {
+    window.prism.createTab({ url: HISTORY_URL })
+  }
+}
 
 function App(): React.JSX.Element {
   const ready = useSession() // hydrate depuis la session persistée
@@ -28,12 +45,15 @@ function App(): React.JSX.Element {
         })
       } else if (key === 'h') {
         e.preventDefault()
-        window.prism.openHistory()
+        openOrFocusHistory()
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [])
+
+  // Ctrl+H frappé alors qu'une PAGE avait le focus : le Main nous relaie l'intention ici.
+  useEffect(() => window.prism.onOpenHistory(openOrFocusHistory), [])
 
   return (
     <div className="relative flex h-screen w-screen flex-col overflow-hidden bg-sidebar">
