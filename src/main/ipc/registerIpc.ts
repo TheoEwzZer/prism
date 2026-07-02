@@ -240,6 +240,18 @@ export function setupBrowser(window: BrowserWindow, initialSession: SessionData)
   })
   ipcMain.on(IPC.TAB_ACTIVATE, (_e, id: string) => {
     tabManager.activateTab(id)
+    session.activeTabId = id
+    // Convergence de l'onglet actif vers TOUTES les surfaces (fenêtre + overlay). Indispensable
+    // quand l'activation vient de la palette de commande (overlay) : sans ça, la sidebar de la
+    // fenêtre principale garde son ancien onglet sélectionné.
+    const sync: UiSyncState = {
+      order: session.order,
+      pinnedTabIds: session.pinnedTabIds,
+      folders: session.folders,
+      activeTabId: session.activeTabId
+    }
+    if (!window.isDestroyed()) window.webContents.send(IPC.UI_STATE_SYNC, sync)
+    if (overlay.webContentsId !== null) overlay.forward(IPC.UI_STATE_SYNC, sync)
     persist()
   })
   ipcMain.on(IPC.TAB_NAVIGATE, (_e, payload: { id: string; input: string }) => {
