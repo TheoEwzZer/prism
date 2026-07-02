@@ -45,10 +45,6 @@ export function TabContextMenu({ data }: { data: TabMenuPayload }): React.JSX.El
     if (url) window.prism.copyText(url)
     close()
   }
-  const hibernate = (): void => {
-    window.prism.hibernateTab(tabId)
-    close()
-  }
   const startRename = (): void => {
     setDraft(customTitle || title || '')
     setRenaming(true)
@@ -97,12 +93,6 @@ export function TabContextMenu({ data }: { data: TabMenuPayload }): React.JSX.El
             label="Copier l'URL"
             disabled={!url}
             onClick={copyUrl}
-          />
-          <Row
-            icon={<Moon className="size-4" />}
-            label="Mettre en hibernation"
-            disabled={isHibernated}
-            onClick={hibernate}
           />
           <Row icon={<Pencil className="size-4" />} label="Renommer" onClick={startRename} />
         </>
