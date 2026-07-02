@@ -1,6 +1,7 @@
 import { ipcMain, shell, clipboard, net, type BrowserWindow } from 'electron'
 import {
   IPC,
+  clampSidebarWidth,
   type SessionData,
   type TabPatch,
   type CreateTabInput,
@@ -255,6 +256,26 @@ export function setupBrowser(window: BrowserWindow, initialSession: SessionData)
       overlay.cancelSidebarToggle() // annule un toggle en cours (re-bascule / resize rapide)
       tabManager.setSidebar(intent.width, intent.collapsed)
     }
+    // L'overlay a besoin du layout courant pour caler la poignée de resize (mode déployé).
+    overlay.pushLayout(intent.width, intent.collapsed)
+  })
+
+  // Drag de la poignée de resize : le geste est possédé par la couche d'overlay (seule à capter la
+  // souris AU-DESSUS de la vue web native). La largeur est partagée entre toggle et peek (source
+  // unique `session.sidebarWidth`, façon Arc).
+  ipcMain.on(IPC.SIDEBAR_SET_WIDTH, (_e, raw: number) => {
+    const width = clampSidebarWidth(raw)
+    if (session.sidebarWidth === width) return
+    session.sidebarWidth = width
+    // Bounds natifs en direct (no-op si repliée : effective=0).
+    tabManager.setSidebar(width, session.sidebarCollapsed)
+    // La vraie sidebar DOM (fenêtre principale) suit ; useSidebarLayout NE ré-émet PAS (anti-écho).
+    if (!window.isDestroyed()) window.webContents.send(IPC.SIDEBAR_WIDTH, width)
+    // Le panneau de peek (overlay) suit sa largeur en direct ; la poignée déployée aussi (l'anti-écho
+    // supprime le VIEW_SET_SIDEBAR qui pousserait sinon ce layout → on le pousse explicitement).
+    overlay.setPeekWidth(width)
+    overlay.pushLayout(width, session.sidebarCollapsed)
+    persist()
   })
 
   ipcMain.on(IPC.OPEN_EXTERNAL, (_e, url: string) => {
@@ -362,6 +383,7 @@ export function setupBrowser(window: BrowserWindow, initialSession: SessionData)
     ipcMain.removeAllListeners(IPC.OVERLAY_SET_IGNORE)
     ipcMain.removeAllListeners(IPC.SIDEBAR_PEEK_OPEN)
     ipcMain.removeAllListeners(IPC.SIDEBAR_PEEK_CLOSE)
+    ipcMain.removeAllListeners(IPC.SIDEBAR_SET_WIDTH)
     ipcMain.removeAllListeners(IPC.SESSION_SAVE_UI)
     ipcMain.removeAllListeners(IPC.WINDOW_MINIMIZE)
     ipcMain.removeAllListeners(IPC.WINDOW_MAXIMIZE)

@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { clampSidebarWidth } from '@shared/types'
 import type {
   TabState,
   FolderState,
@@ -51,6 +52,7 @@ interface TabsState {
   setActive: (id: string) => void
   toggleFolder: (id: string) => void
   setSidebarCollapsed: (collapsed: boolean) => void
+  setSidebarWidth: (width: number) => void
   /**
    * Commit d'un déplacement drag & drop : réécrit la liste des favoris (`fav`) et l'ordre des
    * onglets actuels (`cur`). `order` est reconstruit avec les actuels en tête (l'ordre des
@@ -153,6 +155,8 @@ export const useTabsStore = create<TabsState>((set, get) => ({
   },
 
   setSidebarCollapsed: (collapsed): void => set({ sidebarCollapsed: collapsed }),
+
+  setSidebarWidth: (width): void => set({ sidebarWidth: clampSidebarWidth(width) }),
 
   commitLists: (fav, cur): void => {
     set((state) => {

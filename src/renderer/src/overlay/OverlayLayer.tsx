@@ -6,10 +6,13 @@ import type {
   SiteControlPayload,
   SidebarPeekState,
   SidebarToggleMaskState,
+  SidebarLayoutState,
   CommandPalettePayload
 } from '@shared/types'
+import { SIDEBAR_DEFAULT_WIDTH } from '@shared/types'
 import { PeekSidebar } from './PeekSidebar'
 import { SidebarToggleMask } from './SidebarToggleMask'
+import { SidebarResizeHandle } from './SidebarResizeHandle'
 import { SiteControlPopover } from './SiteControlPopover'
 import { CommandPalette } from './CommandPalette'
 
@@ -28,12 +31,19 @@ const PEEK_ARM_MS = 150
 export function OverlayLayer(): React.JSX.Element {
   const hydrate = useTabsStore((s) => s.hydrate)
   const [ready, setReady] = useState(false)
-  const [peek, setPeek] = useState<SidebarPeekState>({ open: false, width: 256 })
+  const [peek, setPeek] = useState<SidebarPeekState>({ open: false, width: SIDEBAR_DEFAULT_WIDTH })
   const [toggleMask, setToggleMask] = useState<SidebarToggleMaskState>({
     visible: false,
-    width: 256,
+    width: SIDEBAR_DEFAULT_WIDTH,
     expanded: true
   })
+  // Layout de la sidebar déployée (fenêtre principale) : positionne la poignée de resize hors peek.
+  const [layout, setLayout] = useState<SidebarLayoutState>({
+    width: SIDEBAR_DEFAULT_WIDTH,
+    collapsed: false
+  })
+  // Largeur optimiste pendant un drag (suit le curseur sans attendre l'aller-retour Main).
+  const [dragWidth, setDragWidth] = useState<number | null>(null)
   const [site, setSite] = useState<SiteControlPayload | null>(null)
   const [command, setCommand] = useState<CommandPalettePayload | null>(null)
 
@@ -44,12 +54,14 @@ export function OverlayLayer(): React.JSX.Element {
   useEffect(() => {
     window.prism.getSession().then((session) => {
       hydrate(session)
+      setLayout({ width: session.sidebarWidth, collapsed: session.sidebarCollapsed })
       setReady(true)
     })
   }, [hydrate])
 
   useEffect(() => window.prism.onSidebarPeekState(setPeek), [])
   useEffect(() => window.prism.onSidebarToggleMask(setToggleMask), [])
+  useEffect(() => window.prism.onSidebarLayout(setLayout), [])
   useEffect(() => window.prism.onSiteControlData(setSite), [])
   useEffect(() => window.prism.onCommandData(setCommand), [])
 
@@ -61,6 +73,7 @@ export function OverlayLayer(): React.JSX.Element {
   const peekOpenRef = useRef(false)
   const anyOpenRef = useRef(false)
   const armedRef = useRef(false)
+  const resizingRef = useRef(false)
 
   const setIgnore = (ignore: boolean): void => {
     if (ignoreRef.current === ignore) return
@@ -69,6 +82,12 @@ export function OverlayLayer(): React.JSX.Element {
   }
 
   const hitTest = (x: number, y: number): void => {
+    // Drag de la poignée de resize en cours : on garde la capture souris coûte que coûte (le
+    // curseur peut survoler la zone de la vue native), sans rien fermer.
+    if (resizingRef.current) {
+      setIgnore(false)
+      return
+    }
     // Drag & drop en cours dans le peek : on garde la capture souris et on ne ferme pas le peek,
     // même si le curseur survole le DragOverlay (hors `[data-overlay-hit]`).
     if (document.body.hasAttribute('data-dnd-dragging')) {
@@ -83,8 +102,9 @@ export function OverlayLayer(): React.JSX.Element {
     const panel = el?.closest('[data-overlay-hit]') as HTMLElement | null
     const kind = panel?.dataset.overlayHit ?? null
     setIgnore(kind === null)
-    // Fermeture auto du peek dès que la souris n'est plus dessus (armée après l'ouverture).
-    if (peekOpenRef.current && armedRef.current && kind !== 'peek') {
+    // Fermeture auto du peek dès que la souris n'est plus dessus (armée après l'ouverture). Survoler
+    // la poignée de resize (`resize`) ne ferme PAS le peek : elle en fait partie (bord droit).
+    if (peekOpenRef.current && armedRef.current && kind !== 'peek' && kind !== 'resize') {
       window.prism.closeSidebarPeek()
     }
   }
@@ -107,8 +127,15 @@ export function OverlayLayer(): React.JSX.Element {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // La poignée de resize agit sur la surface visible : le peek s'il est ouvert, sinon la sidebar
+  // déployée (mode toggle). La largeur est partagée entre les deux modes (source `sidebarWidth`).
+  const resizeActive = peek.open || !layout.collapsed
+  const resizeBaseWidth = peek.open ? peek.width : layout.width
+  const resizeWidth = dragWidth ?? resizeBaseWidth
+
   // Réagit aux changements d'ouverture : (dé)verrouille la capture et arme la fermeture du peek.
-  const anyOpen = peek.open || site !== null || command !== null
+  // La poignée de resize a besoin, elle aussi, que la couche hit-teste (pour être saisissable).
+  const anyOpen = peek.open || site !== null || command !== null || resizeActive
   useEffect(() => {
     anyOpenRef.current = anyOpen
     peekOpenRef.current = peek.open
@@ -161,10 +188,34 @@ export function OverlayLayer(): React.JSX.Element {
     }
   }, [command])
 
+  const onResizeStart = (): void => {
+    resizingRef.current = true
+  }
+  const onResizeMove = (w: number): void => {
+    setDragWidth(w) // suivi optimiste (peek + poignée)
+    window.prism.setSidebarWidth(w) // Main = source de vérité (bornage, bounds natifs, persistance)
+  }
+  const onResizeEnd = (): void => {
+    resizingRef.current = false
+    setDragWidth(null)
+    hitTest(lastPos.current.x, lastPos.current.y) // restaure l'état de capture
+  }
+
   return (
     <div className="pointer-events-none fixed inset-0 overflow-hidden">
-      <PeekSidebar open={peek.open} width={peek.width} />
+      <PeekSidebar open={peek.open} width={peek.open ? resizeWidth : peek.width} />
       <SidebarToggleMask state={toggleMask} />
+      {/* Poignée de resize (mode toggle ou peek) : pendant une animation de repli/dépli, on la
+          masque pour ne pas la laisser flotter au-dessus du masque animé. */}
+      {resizeActive && !toggleMask.visible && (
+        <SidebarResizeHandle
+          left={resizeWidth}
+          active={dragWidth !== null}
+          onStart={onResizeStart}
+          onMove={onResizeMove}
+          onEnd={onResizeEnd}
+        />
+      )}
       {site && <SiteControlPopover data={site} />}
       {command && <CommandPalette data={command} />}
     </div>

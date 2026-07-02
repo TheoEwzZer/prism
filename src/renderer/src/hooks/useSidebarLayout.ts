@@ -16,8 +16,19 @@ import { useTabsStore } from '@/store/tabsStore'
 export function useSidebarLayout(): void {
   const collapsed = useTabsStore((s) => s.sidebarCollapsed)
   const width = useTabsStore((s) => s.sidebarWidth)
+  const setSidebarWidth = useTabsStore((s) => s.setSidebarWidth)
 
   const lastSent = useRef<{ width: number; collapsed: boolean } | null>(null)
+
+  // Largeur poussée par le Main pendant un drag de la poignée (geste possédé par l'overlay). On
+  // met à jour le store ET `lastSent` : la vraie sidebar DOM suit, mais l'effet ci-dessous NE
+  // ré-émet PAS l'intention (le Main a déjà appliqué les bounds natifs) → aucun ping-pong.
+  useEffect(() => {
+    return window.prism.onSidebarWidth((w) => {
+      lastSent.current = { width: w, collapsed: useTabsStore.getState().sidebarCollapsed }
+      setSidebarWidth(w)
+    })
+  }, [setSidebarWidth])
 
   useEffect(() => {
     const prev = lastSent.current

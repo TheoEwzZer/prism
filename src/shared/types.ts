@@ -80,6 +80,29 @@ export interface SidebarIntent {
   collapsed: boolean
 }
 
+/**
+ * Contraintes de largeur de la sidebar (px). `DEFAULT` = largeur historique (taille de base). La
+ * même largeur sert le mode déployé (toggle) ET le peek — c'est la source unique `sidebarWidth`.
+ */
+export const SIDEBAR_MIN_WIDTH = 180
+export const SIDEBAR_MAX_WIDTH = 460
+export const SIDEBAR_DEFAULT_WIDTH = 256
+
+/** Borne une largeur de sidebar demandée dans [MIN, MAX] (arrondie au pixel). */
+export function clampSidebarWidth(width: number): number {
+  return Math.max(SIDEBAR_MIN_WIDTH, Math.min(SIDEBAR_MAX_WIDTH, Math.round(width)))
+}
+
+/**
+ * Layout courant de la sidebar poussé du Main vers la couche d'overlay : lui permet de positionner
+ * la poignée de resize sur le bord droit de la sidebar déployée (mode toggle), le peek ayant sa
+ * propre largeur via `SidebarPeekState`.
+ */
+export interface SidebarLayoutState {
+  width: number
+  collapsed: boolean
+}
+
 /** Noms de canaux IPC — source unique de vérité, importée des deux côtés. */
 export const IPC = {
   // Renderer -> Main (invoke, réponse attendue)
@@ -110,6 +133,7 @@ export const IPC = {
   OVERLAY_SET_IGNORE: 'overlay:setIgnore', // overlay -> Main : capter/laisser passer la souris
   SIDEBAR_PEEK_OPEN: 'sidebar:peekOpen', // main -> Main : survol du bord gauche
   SIDEBAR_PEEK_CLOSE: 'sidebar:peekClose', // overlay -> Main : souris sortie du panneau
+  SIDEBAR_SET_WIDTH: 'sidebar:setWidth', // overlay -> Main : drag de la poignée de resize (px)
   OVERLAY_COMMAND: 'overlay:command', // main/Main -> Main : ouvrir la palette de commande
   OVERLAY_COMMAND_CLOSE: 'overlay:commandClose', // overlay -> Main : fermer la palette
   WINDOW_MINIMIZE: 'window:minimize',
@@ -121,6 +145,8 @@ export const IPC = {
   HISTORY_OPEN: 'history:open', // Main -> Renderer : ouvrir/focus l'onglet prism://history/ (Ctrl+H)
   SIDEBAR_PEEK_STATE: 'sidebar:peekState', // Main -> overlay : ouverture/fermeture animée
   SIDEBAR_TOGGLE_MASK: 'sidebar:toggleMask', // Main -> overlay : masque animé du repli/dépli sidebar
+  SIDEBAR_WIDTH: 'sidebar:width', // Main -> fenêtre principale : largeur suivie pendant le drag
+  SIDEBAR_LAYOUT: 'sidebar:layout', // Main -> overlay : layout courant (poignée de resize déployée)
   UI_STATE_SYNC: 'ui:stateSync', // Main -> autres fenêtres : convergence de l'état organisationnel
   TAB_UPDATED: 'tab:updated',
   TAB_CREATED: 'tab:created',

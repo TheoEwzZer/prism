@@ -13,6 +13,7 @@ import {
   type SiteControlPayload,
   type SidebarPeekState,
   type SidebarToggleMaskState,
+  type SidebarLayoutState,
   type CommandPalettePayload,
   type HistoryEntry,
   type HistoryListInput,
@@ -42,6 +43,8 @@ const prism = {
   goForward: (id: string): void => ipcRenderer.send(IPC.TAB_FORWARD, id),
   reload: (id: string): void => ipcRenderer.send(IPC.TAB_RELOAD, id),
   setSidebar: (intent: SidebarIntent): void => ipcRenderer.send(IPC.VIEW_SET_SIDEBAR, intent),
+  // Drag de la poignée de resize (émis par la couche d'overlay qui possède le geste).
+  setSidebarWidth: (width: number): void => ipcRenderer.send(IPC.SIDEBAR_SET_WIDTH, width),
   saveUiState: (ui: UiPersistState): void => ipcRenderer.send(IPC.SESSION_SAVE_UI, ui),
 
   // Utilitaires
@@ -83,6 +86,11 @@ const prism = {
     subscribe(IPC.SIDEBAR_PEEK_STATE, cb),
   onSidebarToggleMask: (cb: (state: SidebarToggleMaskState) => void): (() => void) =>
     subscribe(IPC.SIDEBAR_TOGGLE_MASK, cb),
+  // Fenêtre principale : largeur poussée par le Main pendant un drag (la vraie sidebar DOM suit).
+  onSidebarWidth: (cb: (width: number) => void): (() => void) => subscribe(IPC.SIDEBAR_WIDTH, cb),
+  // Couche d'overlay : layout courant pour positionner la poignée de resize en mode déployé.
+  onSidebarLayout: (cb: (state: SidebarLayoutState) => void): (() => void) =>
+    subscribe(IPC.SIDEBAR_LAYOUT, cb),
 
   // Contrôles de fenêtre (frameless)
   minimizeWindow: (): void => ipcRenderer.send(IPC.WINDOW_MINIMIZE),

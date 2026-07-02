@@ -113,6 +113,20 @@ export class OverlayLayer {
   }
 
   /**
+   * Met à jour la largeur mémorisée du peek (drag de la poignée de resize). Si le peek est ouvert,
+   * le panneau suit en direct ; sinon on ne fait que mémoriser (la prochaine ouverture l'utilisera).
+   */
+  setPeekWidth(width: number): void {
+    this.peekWidth = width
+    if (this.peekOpen) this.send(IPC.SIDEBAR_PEEK_STATE, { open: true, width })
+  }
+
+  /** Pousse le layout courant de la sidebar à l'overlay (positionne la poignée de resize déployée). */
+  pushLayout(width: number, collapsed: boolean): void {
+    this.send(IPC.SIDEBAR_LAYOUT, { width, collapsed })
+  }
+
+  /**
    * Repli/dépli fluide de la sidebar. La vue web native ne peut pas s'animer sans saccade ; on la
    * cale donc INSTANTANÉMENT à son état final (via `snap`) et on joue l'animation dans l'overlay :
    * un masque (copie de la sidebar) anime sa largeur en CSS/GPU par-dessus la vue native.
