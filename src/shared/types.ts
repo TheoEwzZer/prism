@@ -91,6 +91,9 @@ export const IPC = {
   SESSION_SAVE_UI: 'session:saveUi',
   OPEN_EXTERNAL: 'app:openExternal',
   CLIPBOARD_WRITE: 'app:clipboardWrite',
+  HISTORY_SEARCH: 'history:search', // invoke : recherche dans l'historique local
+  HISTORY_REMOVE: 'history:remove', // send : supprime une entrée d'historique
+  SUGGEST_QUERY: 'suggest:query', // invoke : suggestions de recherche (Google Suggest)
   // Couche d'overlay unique : UNE fenêtre transparente persistante qui recouvre toute la zone
   // contenu et flotte AU-DESSUS de la WebContentsView (peek de la sidebar + Contrôles du site
   // + futurs menus). Ouverture instantanée, animations CSS, click-through géré par hit-test.
@@ -162,4 +165,15 @@ export interface CommandPalettePayload {
   activeId: string | null
   /** Texte pré-rempli dans le champ (ex. l'URL courante quand on clique dessus). */
   initialQuery?: string
+}
+
+/** Entrée d'historique de navigation (persistée). */
+export interface HistoryEntry {
+  url: string
+  title: string
+  favicon: string | null
+  /** Nombre de visites (utilisé pour le classement frecency). */
+  visitCount: number
+  /** Timestamp (ms) de la dernière visite. */
+  lastVisit: number
 }

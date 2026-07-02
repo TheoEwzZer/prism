@@ -11,7 +11,8 @@ import {
   type WindowState,
   type SiteControlPayload,
   type SidebarPeekState,
-  type CommandPalettePayload
+  type CommandPalettePayload,
+  type HistoryEntry
 } from '@shared/types'
 
 /** Abonnement typé à un event Main -> Renderer ; retourne une fonction de désabonnement. */
@@ -42,6 +43,13 @@ const prism = {
   // Utilitaires
   openExternal: (url: string): void => ipcRenderer.send(IPC.OPEN_EXTERNAL, url),
   copyText: (text: string): void => ipcRenderer.send(IPC.CLIPBOARD_WRITE, text),
+
+  // Historique + suggestions (palette de commande)
+  searchHistory: (query: string, limit?: number): Promise<HistoryEntry[]> =>
+    ipcRenderer.invoke(IPC.HISTORY_SEARCH, { query, limit }),
+  removeHistory: (url: string): void => ipcRenderer.send(IPC.HISTORY_REMOVE, url),
+  getSuggestions: (query: string): Promise<string[]> =>
+    ipcRenderer.invoke(IPC.SUGGEST_QUERY, query),
 
   // Couche d'overlay unique (au-dessus de la page). Depuis la fenêtre principale :
   openSiteControl: (payload: SiteControlPayload): void =>

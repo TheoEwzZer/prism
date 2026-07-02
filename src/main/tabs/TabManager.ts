@@ -23,6 +23,14 @@ interface TabEntry {
 /** Callback d'émission d'un patch d'onglet vers le Renderer (coalescé en amont). */
 export type EmitPatch = (id: string, patch: TabPatch) => void
 
+/** Hooks d'historique (découplés du store : injectés par le runtime). */
+export interface HistoryHooks {
+  /** Nouvelle navigation principale → enregistre une visite. */
+  visit: (url: string) => void
+  /** Title/favicon arrivés après coup → met à jour l'entrée existante. */
+  updateMeta: (url: string, patch: { title?: string; favicon?: string | null }) => void
+}
+
 /**
  * Cœur métier : gère le cycle de vie des WebContentsView, le layout (source de vérité des
  * bounds), le focus, l'hibernation, et remonte les changements via `emitPatch`.
@@ -42,7 +50,9 @@ export class TabManager {
     private readonly window: BrowserWindow,
     private readonly emitPatch: EmitPatch,
     /** Ouvre la palette de commande (Ctrl+T depuis une page ayant le focus). */
-    private readonly onCommandShortcut: () => void = () => {}
+    private readonly onCommandShortcut: () => void = () => {},
+    /** Hooks d'historique (optionnels). */
+    private readonly history?: HistoryHooks
   ) {
     // Recalcul des bounds coalescé (une source unique : le Main).
     this.boundsCoalescer = new FrameCoalescer(() => this.applyBoundsNow(), 16)
@@ -184,9 +194,16 @@ export class TabManager {
       }
     })
 
-    wc.on('page-title-updated', (_e, title) => this.emitPatch(id, { title }))
+    wc.on('page-title-updated', (_e, title) => {
+      this.emitPatch(id, { title })
+      const url = this.tabs.get(id)?.meta.url
+      if (url) this.history?.updateMeta(url, { title })
+    })
     wc.on('page-favicon-updated', (_e, favicons) => {
-      this.emitPatch(id, { favicon: favicons[0] ?? null })
+      const favicon = favicons[0] ?? null
+      this.emitPatch(id, { favicon })
+      const url = this.tabs.get(id)?.meta.url
+      if (url && favicon) this.history?.updateMeta(url, { favicon })
     })
     wc.on('did-start-loading', () => this.emitPatch(id, { isLoading: true }))
     wc.on('did-stop-loading', () => {
@@ -196,6 +213,7 @@ export class TabManager {
       const entry = this.tabs.get(id)
       if (entry) entry.meta.url = url
       this.emitPatch(id, { url, ...this.navFlags(id) })
+      this.history?.visit(url)
     })
     wc.on('did-navigate-in-page', (_e, url, isMainFrame) => {
       if (!isMainFrame) return

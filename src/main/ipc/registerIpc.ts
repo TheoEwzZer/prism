@@ -1,4 +1,4 @@
-import { ipcMain, shell, clipboard, type BrowserWindow } from 'electron'
+import { ipcMain, shell, clipboard, net, type BrowserWindow } from 'electron'
 import {
   IPC,
   type SessionData,
@@ -13,6 +13,56 @@ import { TabManager } from '../tabs/TabManager'
 import { OverlayLayer } from '../overlay/OverlayLayer'
 import { FrameCoalescer } from '../utils/scheduler'
 import { saveSession, flushSession } from '../persistence/sessionStore'
+import {
+  recordVisit,
+  updateMeta,
+  searchHistory,
+  removeEntry,
+  flushHistory
+} from '../persistence/historyStore'
+
+/**
+ * Suggestions de recherche via Google Suggest (client Firefox → JSON `[q, [suggestions...]]`).
+ * Exécuté côté Main pour éviter les restrictions CORS d'un fetch renderer. Erreur/timeout → [].
+ */
+function fetchSuggestions(query: string): Promise<string[]> {
+  const q = query.trim()
+  if (!q) return Promise.resolve([])
+  return new Promise((resolve) => {
+    const url = `https://suggestqueries.google.com/complete/search?client=firefox&hl=fr&q=${encodeURIComponent(q)}`
+    let body = ''
+    let settled = false
+    const finish = (val: string[]): void => {
+      if (settled) return
+      settled = true
+      clearTimeout(timeout)
+      resolve(val)
+    }
+    const req = net.request(url)
+    const timeout = setTimeout(() => {
+      try {
+        req.abort()
+      } catch {
+        // ignore
+      }
+      finish([])
+    }, 2500)
+    req.on('response', (res) => {
+      res.on('data', (chunk) => (body += chunk.toString()))
+      res.on('end', () => {
+        try {
+          const parsed = JSON.parse(body) as unknown
+          const list = Array.isArray(parsed) && Array.isArray(parsed[1]) ? parsed[1] : []
+          finish(list.filter((s): s is string => typeof s === 'string').slice(0, 8))
+        } catch {
+          finish([])
+        }
+      })
+    })
+    req.on('error', () => finish([]))
+    req.end()
+  })
+}
 
 export interface BrowserRuntime {
   tabManager: TabManager
@@ -56,8 +106,11 @@ export function setupBrowser(window: BrowserWindow, initialSession: SessionData)
   }
 
   const overlay = new OverlayLayer(window)
-  const tabManager = new TabManager(window, emitPatch, () =>
-    overlay.toggleCommand({ mode: 'newTab', activeId: tabManager.getActiveTabId() })
+  const tabManager = new TabManager(
+    window,
+    emitPatch,
+    () => overlay.toggleCommand({ mode: 'newTab', activeId: tabManager.getActiveTabId() }),
+    { visit: recordVisit, updateMeta }
   )
 
   // Restauration lazy : on enregistre les metas (hibernées), sans créer de vue.
@@ -118,6 +171,13 @@ export function setupBrowser(window: BrowserWindow, initialSession: SessionData)
   })
   ipcMain.on(IPC.CLIPBOARD_WRITE, (_e, text: string) => clipboard.writeText(text))
 
+  // Historique + suggestions (palette de commande).
+  ipcMain.handle(IPC.HISTORY_SEARCH, (_e, payload: { query: string; limit?: number }) =>
+    searchHistory(payload.query, payload.limit)
+  )
+  ipcMain.on(IPC.HISTORY_REMOVE, (_e, url: string) => removeEntry(url))
+  ipcMain.handle(IPC.SUGGEST_QUERY, (_e, query: string) => fetchSuggestions(query))
+
   // Couche d'overlay unique (au-dessus de la page).
   ipcMain.on(IPC.OVERLAY_SITE_CONTROL, (_e, payload: SiteControlPayload) =>
     overlay.toggleSiteControl(payload)
@@ -162,9 +222,10 @@ export function setupBrowser(window: BrowserWindow, initialSession: SessionData)
     tabManager.dispose()
     overlay.dispose()
     // Retrait des handlers pour éviter les doublons en cas de recréation de fenêtre.
-    for (const ch of [IPC.SESSION_GET, IPC.TAB_CREATE]) {
+    for (const ch of [IPC.SESSION_GET, IPC.TAB_CREATE, IPC.HISTORY_SEARCH, IPC.SUGGEST_QUERY]) {
       ipcMain.removeHandler(ch)
     }
+    ipcMain.removeAllListeners(IPC.HISTORY_REMOVE)
     ipcMain.removeAllListeners(IPC.TAB_CLOSE)
     ipcMain.removeAllListeners(IPC.TAB_ACTIVATE)
     ipcMain.removeAllListeners(IPC.TAB_NAVIGATE)
@@ -190,6 +251,7 @@ export function setupBrowser(window: BrowserWindow, initialSession: SessionData)
   const persistNow = (): void => {
     saveSession(buildSession(), 0)
     flushSession()
+    flushHistory()
   }
 
   return { tabManager, persistNow, dispose }
