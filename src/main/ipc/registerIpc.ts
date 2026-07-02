@@ -21,21 +21,63 @@ import {
   flushHistory
 } from '../persistence/historyStore'
 
+// Cache mémoire des suggestions. Deux niveaux : (1) exact — l'utilisateur efface/retape le même
+// terme ; (2) préfixe — en tapant `chat`→`chatg`→`chatgp`, on réutilise la liste du plus long
+// préfixe déjà connu au lieu de re-solliciter Google. Seules les vraies réponses parsées sont
+// mises en cache (jamais les timeouts/erreurs, transitoires).
+const SUGGEST_TTL_MS = 5 * 60_000
+const SUGGEST_CACHE_MAX = 200
+// En-dessous de ce nombre de suggestions réutilisables, le préfixe est jugé trop pauvre (ranking
+// trop dégradé) → on préfère un vrai fetch. Borne la perte de qualité du cache de préfixe.
+const SUGGEST_MIN_REUSE = 4
+const suggestCache = new Map<string, { value: string[]; expiry: number }>()
+
+/** Normalisation pour la comparaison de préfixe : minuscule + sans espaces (`chat gpt`≈`chatgpt`). */
+function normSuggest(s: string): string {
+  return s.toLowerCase().replace(/\s+/g, '')
+}
+
+function cacheSuggest(key: string, value: string[]): void {
+  suggestCache.set(key, { value, expiry: Date.now() + SUGGEST_TTL_MS })
+  if (suggestCache.size > SUGGEST_CACHE_MAX) {
+    const oldest = suggestCache.keys().next().value // Map = ordre d'insertion
+    if (oldest !== undefined) suggestCache.delete(oldest)
+  }
+}
+
 /**
- * Suggestions de recherche via Google Suggest (client Firefox → JSON `[q, [suggestions...]]`).
- * Exécuté côté Main pour éviter les restrictions CORS d'un fetch renderer. Erreur/timeout → [].
+ * Cherche le PLUS LONG préfixe caché (non expiré) de `q`, puis filtre ses suggestions à celles
+ * encore pertinentes pour `q` (préfixe insensible aux espaces). Retourne null si aucun préfixe
+ * ou trop peu de résultats réutilisables (on refera alors un vrai fetch).
  */
-function fetchSuggestions(query: string): Promise<string[]> {
-  const q = query.trim()
-  if (!q) return Promise.resolve([])
+function prefixCacheHit(q: string): string[] | null {
+  const nq = normSuggest(q)
+  const now = Date.now()
+  let best: { len: number; value: string[] } | null = null
+  for (const [key, entry] of suggestCache) {
+    if (entry.expiry <= now) continue
+    const nk = normSuggest(key)
+    if (nk.length < nq.length && nq.startsWith(nk) && (!best || key.length > best.len)) {
+      best = { len: key.length, value: entry.value }
+    }
+  }
+  if (!best) return null
+  const filtered = best.value.filter((s) => normSuggest(s).startsWith(nq))
+  return filtered.length >= SUGGEST_MIN_REUSE ? filtered.slice(0, 8) : null
+}
+
+/** Requête réseau réelle vers Google Suggest (+ mise en cache de la réponse parsée). */
+function networkFetch(q: string, key: string): Promise<string[]> {
   return new Promise((resolve) => {
     const url = `https://suggestqueries.google.com/complete/search?client=firefox&hl=fr&q=${encodeURIComponent(q)}`
     let body = ''
     let settled = false
-    const finish = (val: string[]): void => {
+    // `cache` = true seulement pour une vraie réponse parsée (pas les timeouts/erreurs).
+    const finish = (val: string[], cache = false): void => {
       if (settled) return
       settled = true
       clearTimeout(timeout)
+      if (cache) cacheSuggest(key, val)
       resolve(val)
     }
     const req = net.request(url)
@@ -53,7 +95,7 @@ function fetchSuggestions(query: string): Promise<string[]> {
         try {
           const parsed = JSON.parse(body) as unknown
           const list = Array.isArray(parsed) && Array.isArray(parsed[1]) ? parsed[1] : []
-          finish(list.filter((s): s is string => typeof s === 'string').slice(0, 8))
+          finish(list.filter((s): s is string => typeof s === 'string').slice(0, 8), true)
         } catch {
           finish([])
         }
@@ -62,6 +104,25 @@ function fetchSuggestions(query: string): Promise<string[]> {
     req.on('error', () => finish([]))
     req.end()
   })
+}
+
+/**
+ * Suggestions de recherche via Google Suggest, exécuté côté Main (pas de CORS). Cache à deux
+ * niveaux (exact puis préfixe) avant tout appel réseau. Erreur/timeout → [].
+ */
+function fetchSuggestions(query: string): Promise<string[]> {
+  const q = query.trim()
+  if (!q) return Promise.resolve([])
+
+  const key = q.toLowerCase()
+  const exact = suggestCache.get(key)
+  if (exact && exact.expiry > Date.now()) return Promise.resolve(exact.value)
+  if (exact) suggestCache.delete(key) // expiré
+
+  const prefix = prefixCacheHit(q)
+  if (prefix) return Promise.resolve(prefix)
+
+  return networkFetch(q, key)
 }
 
 export interface BrowserRuntime {
