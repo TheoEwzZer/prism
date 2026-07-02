@@ -10,6 +10,7 @@ import {
   type UiSyncState,
   type SiteControlPayload,
   type CommandPalettePayload,
+  type TabMenuPayload,
   type HistoryListInput
 } from '@shared/types'
 import { TabManager } from '../tabs/TabManager'
@@ -247,6 +248,14 @@ export function setupBrowser(window: BrowserWindow, initialSession: SessionData)
   ipcMain.on(IPC.TAB_BACK, (_e, id: string) => tabManager.goBack(id))
   ipcMain.on(IPC.TAB_FORWARD, (_e, id: string) => tabManager.goForward(id))
   ipcMain.on(IPC.TAB_RELOAD, (_e, id: string) => tabManager.reload(id))
+  ipcMain.on(IPC.TAB_HIBERNATE, (_e, id: string) => {
+    tabManager.hibernateTab(id)
+    persist()
+  })
+  ipcMain.on(IPC.TAB_RENAME, (_e, payload: { id: string; title: string | null }) => {
+    tabManager.renameTab(payload.id, payload.title)
+    persist()
+  })
 
   ipcMain.on(IPC.VIEW_SET_SIDEBAR, (_e, intent: SidebarIntent) => {
     // Toggle repli/dépli : on joue l'animation fluide via l'overlay (masque CSS) tandis que la vue
@@ -305,6 +314,8 @@ export function setupBrowser(window: BrowserWindow, initialSession: SessionData)
     overlay.toggleSiteControl(payload)
   )
   ipcMain.on(IPC.OVERLAY_CLOSE, () => overlay.hideSiteControl())
+  ipcMain.on(IPC.OVERLAY_TAB_MENU, (_e, payload: TabMenuPayload) => overlay.openTabMenu(payload))
+  ipcMain.on(IPC.OVERLAY_TAB_MENU_CLOSE, () => overlay.hideTabMenu())
   ipcMain.on(IPC.OVERLAY_COMMAND, (_e, payload: CommandPalettePayload) =>
     overlay.toggleCommand(payload)
   )
@@ -380,11 +391,15 @@ export function setupBrowser(window: BrowserWindow, initialSession: SessionData)
     ipcMain.removeAllListeners(IPC.TAB_BACK)
     ipcMain.removeAllListeners(IPC.TAB_FORWARD)
     ipcMain.removeAllListeners(IPC.TAB_RELOAD)
+    ipcMain.removeAllListeners(IPC.TAB_HIBERNATE)
+    ipcMain.removeAllListeners(IPC.TAB_RENAME)
     ipcMain.removeAllListeners(IPC.VIEW_SET_SIDEBAR)
     ipcMain.removeAllListeners(IPC.OPEN_EXTERNAL)
     ipcMain.removeAllListeners(IPC.CLIPBOARD_WRITE)
     ipcMain.removeAllListeners(IPC.OVERLAY_SITE_CONTROL)
     ipcMain.removeAllListeners(IPC.OVERLAY_CLOSE)
+    ipcMain.removeAllListeners(IPC.OVERLAY_TAB_MENU)
+    ipcMain.removeAllListeners(IPC.OVERLAY_TAB_MENU_CLOSE)
     ipcMain.removeAllListeners(IPC.OVERLAY_COMMAND)
     ipcMain.removeAllListeners(IPC.OVERLAY_COMMAND_CLOSE)
     ipcMain.removeAllListeners(IPC.OVERLAY_SET_IGNORE)

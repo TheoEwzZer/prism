@@ -32,6 +32,8 @@ export const TabItem = memo(function TabItem({
   drag?: TabDragBind
 }): React.JSX.Element | null {
   const title = useTabsStore((s) => s.tabs[id]?.title)
+  const customTitle = useTabsStore((s) => s.tabs[id]?.customTitle)
+  const url = useTabsStore((s) => s.tabs[id]?.url)
   const favicon = useTabsStore((s) => s.tabs[id]?.favicon)
   const isLoading = useTabsStore((s) => s.tabs[id]?.isLoading)
   const isHibernated = useTabsStore((s) => s.tabs[id]?.isHibernated)
@@ -42,6 +44,9 @@ export const TabItem = memo(function TabItem({
 
   // Onglet retiré du store entre-temps.
   if (title === undefined) return null
+
+  // Nom personnalisé (« Renommer ») prioritaire sur le titre auto de la page.
+  const displayName = customTitle || title || 'Nouvel onglet'
 
   const activate = (): void => {
     setActive(id)
@@ -72,6 +77,20 @@ export const TabItem = memo(function TabItem({
     if (e.button === 1) e.preventDefault()
   }
 
+  // Clic droit : ouvre le menu contextuel dans la couche d'overlay (au-dessus de la vue web native
+  // — un menu DOM de la fenêtre principale passerait DERRIÈRE la page). `x`/`y` en coord. client.
+  const onContextMenu = (e: React.MouseEvent): void => {
+    e.preventDefault()
+    e.stopPropagation()
+    window.prism.openTabMenu({
+      tabId: id,
+      url: url ?? '',
+      isHibernated: Boolean(isHibernated),
+      x: e.clientX,
+      y: e.clientY
+    })
+  }
+
   return (
     <div
       ref={drag?.setNodeRef}
@@ -79,6 +98,7 @@ export const TabItem = memo(function TabItem({
       onClick={activate}
       onAuxClick={onAuxClose}
       onMouseDown={onMiddleMouseDown}
+      onContextMenu={onContextMenu}
       {...drag?.attributes}
       {...drag?.listeners}
       className={cn(
@@ -104,7 +124,7 @@ export const TabItem = memo(function TabItem({
       <span
         className={cn('min-w-0 flex-1 truncate group-hover:pr-6', isHibernated && 'opacity-60')}
       >
-        {title || 'Nouvel onglet'}
+        {displayName}
       </span>
 
       {/* Lune d'hibernation : cachée au survol (la croix occupe alors ce coin droit). */}

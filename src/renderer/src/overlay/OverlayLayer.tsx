@@ -7,13 +7,15 @@ import type {
   SidebarPeekState,
   SidebarToggleMaskState,
   SidebarLayoutState,
-  CommandPalettePayload
+  CommandPalettePayload,
+  TabMenuPayload
 } from '@shared/types'
 import { SIDEBAR_DEFAULT_WIDTH } from '@shared/types'
 import { PeekSidebar } from './PeekSidebar'
 import { SidebarToggleMask } from './SidebarToggleMask'
 import { SidebarResizeHandle } from './SidebarResizeHandle'
 import { SiteControlPopover } from './SiteControlPopover'
+import { TabContextMenu } from './TabContextMenu'
 import { CommandPalette } from './CommandPalette'
 
 const PEEK_ARM_MS = 150
@@ -45,6 +47,7 @@ export function OverlayLayer(): React.JSX.Element {
   // Largeur optimiste pendant un drag (suit le curseur sans attendre l'aller-retour Main).
   const [dragWidth, setDragWidth] = useState<number | null>(null)
   const [site, setSite] = useState<SiteControlPayload | null>(null)
+  const [tabMenu, setTabMenu] = useState<TabMenuPayload | null>(null)
   const [command, setCommand] = useState<CommandPalettePayload | null>(null)
 
   useTabEvents() // patchs + convergence de l'état organisationnel relayés par le Main
@@ -63,6 +66,7 @@ export function OverlayLayer(): React.JSX.Element {
   useEffect(() => window.prism.onSidebarToggleMask(setToggleMask), [])
   useEffect(() => window.prism.onSidebarLayout(setLayout), [])
   useEffect(() => window.prism.onSiteControlData(setSite), [])
+  useEffect(() => window.prism.onTabMenuData(setTabMenu), [])
   useEffect(() => window.prism.onCommandData(setCommand), [])
 
   // --- Click-through : hit-test global ---
@@ -74,6 +78,7 @@ export function OverlayLayer(): React.JSX.Element {
   const anyOpenRef = useRef(false)
   const armedRef = useRef(false)
   const resizingRef = useRef(false)
+  const tabMenuOpenRef = useRef(false)
 
   const setIgnore = (ignore: boolean): void => {
     if (ignoreRef.current === ignore) return
@@ -102,6 +107,10 @@ export function OverlayLayer(): React.JSX.Element {
     const panel = el?.closest('[data-overlay-hit]') as HTMLElement | null
     const kind = panel?.dataset.overlayHit ?? null
     setIgnore(kind === null)
+    // Un menu contextuel ouvert « épingle » le peek : tant qu'il est là, la souris peut sortir du
+    // panneau sans fermer le peek (sinon le menu resterait orphelin). L'auto-fermeture reprend à la
+    // fermeture du menu (cf. effet `tabMenu`, qui relance un hit-test).
+    if (tabMenuOpenRef.current) return
     // Fermeture auto du peek dès que la souris n'est plus dessus (armée après l'ouverture). Survoler
     // la poignée de resize (`resize`) ne ferme PAS le peek : elle en fait partie (bord droit).
     if (peekOpenRef.current && armedRef.current && kind !== 'peek' && kind !== 'resize') {
@@ -135,7 +144,7 @@ export function OverlayLayer(): React.JSX.Element {
 
   // Réagit aux changements d'ouverture : (dé)verrouille la capture et arme la fermeture du peek.
   // La poignée de resize a besoin, elle aussi, que la couche hit-teste (pour être saisissable).
-  const anyOpen = peek.open || site !== null || command !== null || resizeActive
+  const anyOpen = peek.open || site !== null || tabMenu !== null || command !== null || resizeActive
   useEffect(() => {
     anyOpenRef.current = anyOpen
     peekOpenRef.current = peek.open
@@ -171,6 +180,38 @@ export function OverlayLayer(): React.JSX.Element {
       window.removeEventListener('keydown', onKey)
     }
   }, [site])
+
+  // Menu contextuel d'onglet : fermeture au clic extérieur (blur) / Échap. Il « épingle » aussi le
+  // peek (cf. `tabMenuOpenRef` dans `hitTest`) : à sa fermeture, on relance un hit-test pour
+  // reprendre l'auto-fermeture du peek si la souris est désormais hors du panneau.
+  useEffect(() => {
+    tabMenuOpenRef.current = tabMenu !== null
+    if (!tabMenu) {
+      hitTest(lastPos.current.x, lastPos.current.y)
+      return
+    }
+    const onBlur = (): void => window.prism.closeTabMenu()
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') window.prism.closeTabMenu()
+    }
+    // Clic AILLEURS DANS l'overlay (ex. aire vide du peek) : pas de `blur` puisqu'on reste dans la
+    // même fenêtre → on ferme explicitement dès que le clic n'est pas sur le menu. (Les clics dans
+    // la fenêtre principale, eux, ferment déjà via `blur`.)
+    const onDown = (e: PointerEvent): void => {
+      const el = e.target as HTMLElement | null
+      if (!el?.closest('[data-overlay-hit="tabmenu"]')) window.prism.closeTabMenu()
+    }
+    window.addEventListener('blur', onBlur)
+    window.addEventListener('keydown', onKey)
+    window.addEventListener('pointerdown', onDown)
+    return () => {
+      window.removeEventListener('blur', onBlur)
+      window.removeEventListener('keydown', onKey)
+      window.removeEventListener('pointerdown', onDown)
+    }
+    // hitTest lit tout via refs (listener stable).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tabMenu])
 
   // Palette de commande : même logique (clic extérieur / Échap). Échap est géré ici plutôt que
   // par cmdk pour fermer la fenêtre-overlay (et pas seulement vider le champ).
@@ -217,6 +258,7 @@ export function OverlayLayer(): React.JSX.Element {
         />
       )}
       {site && <SiteControlPopover data={site} />}
+      {tabMenu && <TabContextMenu data={tabMenu} />}
       {command && <CommandPalette data={command} />}
     </div>
   )

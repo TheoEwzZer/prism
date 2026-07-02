@@ -303,6 +303,29 @@ export class TabManager {
     this.enforceHibernation()
   }
 
+  /**
+   * Hibernation manuelle (menu contextuel) : détruit le process de rendu tout en conservant la
+   * meta (favicon/titre). No-op si déjà hiberné ou page interne (pas de process). Si l'onglet
+   * était actif, on masque simplement la zone (la meta reste, la vue renaîtra au prochain clic).
+   */
+  hibernateTab(id: string): void {
+    const entry = this.tabs.get(id)
+    if (!entry || !entry.view || isInternalUrl(entry.meta.url)) return
+    this.destroyView(entry)
+    entry.meta.isHibernated = true
+    entry.meta.isLoading = false
+    this.emitPatch(id, { isHibernated: true, isLoading: false })
+  }
+
+  /** Renomme un onglet (nom personnalisé). `title` vidé/`null` = retour au titre automatique. */
+  renameTab(id: string, title: string | null): void {
+    const entry = this.tabs.get(id)
+    if (!entry) return
+    const customTitle = title && title.trim() ? title.trim() : null
+    entry.meta.customTitle = customTitle
+    this.emitPatch(id, { customTitle })
+  }
+
   /** Ferme définitivement un onglet (détruit la vue + libère les ressources). */
   closeTab(id: string): void {
     const entry = this.tabs.get(id)

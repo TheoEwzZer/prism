@@ -1,7 +1,12 @@
 import { BrowserWindow } from 'electron'
 import { join } from 'path'
 import { is } from '@electron-toolkit/utils'
-import { IPC, type SiteControlPayload, type CommandPalettePayload } from '@shared/types'
+import {
+  IPC,
+  type SiteControlPayload,
+  type CommandPalettePayload,
+  type TabMenuPayload
+} from '@shared/types'
 
 /** Durée de l'animation de repli/dépli (doit rester synchro avec la transition CSS du masque). */
 const SIDEBAR_TOGGLE_MS = 200
@@ -27,6 +32,7 @@ export class OverlayLayer {
   private win: BrowserWindow | null = null
   private ready = false
   private siteControl: SiteControlPayload | null = null
+  private tabMenu: TabMenuPayload | null = null
   private command: CommandPalettePayload | null = null
   private peekOpen = false
   // Largeur du peek mémorisée : conservée à la fermeture pour que le slide-out (`-translate-x-full`,
@@ -74,6 +80,24 @@ export class OverlayLayer {
     this.siteControl = null
     this.lastHideAt = Date.now()
     this.send(IPC.OVERLAY_SITE_CONTROL_DATA, null)
+  }
+
+  /**
+   * Menu contextuel d'un onglet (clic droit). Comme les Contrôles du site, il prend le focus pour
+   * se fermer au clic extérieur (blur) / Échap. Rendu dans l'overlay → flotte au-dessus de la page.
+   */
+  openTabMenu(payload: TabMenuPayload): void {
+    this.tabMenu = payload
+    const win = this.ensureWindow()
+    win.focus()
+    this.send(IPC.OVERLAY_TAB_MENU_DATA, payload)
+  }
+
+  hideTabMenu(): void {
+    if (this.tabMenu === null) return
+    this.tabMenu = null
+    this.lastHideAt = Date.now()
+    this.send(IPC.OVERLAY_TAB_MENU_DATA, null)
   }
 
   /**
@@ -237,6 +261,7 @@ export class OverlayLayer {
       win.showInactive() // affichée en permanence, sans voler le focus
       // Resynchronise l'état courant après (re)chargement.
       this.send(IPC.OVERLAY_SITE_CONTROL_DATA, this.siteControl)
+      this.send(IPC.OVERLAY_TAB_MENU_DATA, this.tabMenu)
       this.send(IPC.OVERLAY_COMMAND_DATA, this.command)
       this.send(IPC.SIDEBAR_PEEK_STATE, { open: this.peekOpen, width: this.peekWidth })
     })

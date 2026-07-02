@@ -11,6 +11,7 @@ import {
   type UiSyncState,
   type WindowState,
   type SiteControlPayload,
+  type TabMenuPayload,
   type SidebarPeekState,
   type SidebarToggleMaskState,
   type SidebarLayoutState,
@@ -42,6 +43,9 @@ const prism = {
   goBack: (id: string): void => ipcRenderer.send(IPC.TAB_BACK, id),
   goForward: (id: string): void => ipcRenderer.send(IPC.TAB_FORWARD, id),
   reload: (id: string): void => ipcRenderer.send(IPC.TAB_RELOAD, id),
+  hibernateTab: (id: string): void => ipcRenderer.send(IPC.TAB_HIBERNATE, id),
+  renameTab: (id: string, title: string | null): void =>
+    ipcRenderer.send(IPC.TAB_RENAME, { id, title }),
   setSidebar: (intent: SidebarIntent): void => ipcRenderer.send(IPC.VIEW_SET_SIDEBAR, intent),
   // Drag de la poignée de resize (émis par la couche d'overlay qui possède le geste).
   setSidebarWidth: (width: number): void => ipcRenderer.send(IPC.SIDEBAR_SET_WIDTH, width),
@@ -70,16 +74,20 @@ const prism = {
   openSiteControl: (payload: SiteControlPayload): void =>
     ipcRenderer.send(IPC.OVERLAY_SITE_CONTROL, payload),
   openSidebarPeek: (): void => ipcRenderer.send(IPC.SIDEBAR_PEEK_OPEN),
+  openTabMenu: (payload: TabMenuPayload): void => ipcRenderer.send(IPC.OVERLAY_TAB_MENU, payload),
   openCommandPalette: (payload: CommandPalettePayload): void =>
     ipcRenderer.send(IPC.OVERLAY_COMMAND, payload),
   // Depuis la couche d'overlay elle-même :
   closeSiteControl: (): void => ipcRenderer.send(IPC.OVERLAY_CLOSE),
   closeCommandPalette: (): void => ipcRenderer.send(IPC.OVERLAY_COMMAND_CLOSE),
   closeSidebarPeek: (): void => ipcRenderer.send(IPC.SIDEBAR_PEEK_CLOSE),
+  closeTabMenu: (): void => ipcRenderer.send(IPC.OVERLAY_TAB_MENU_CLOSE),
   setOverlayIgnoreMouse: (ignore: boolean): void =>
     ipcRenderer.send(IPC.OVERLAY_SET_IGNORE, ignore),
   onSiteControlData: (cb: (payload: SiteControlPayload | null) => void): (() => void) =>
     subscribe(IPC.OVERLAY_SITE_CONTROL_DATA, cb),
+  onTabMenuData: (cb: (payload: TabMenuPayload | null) => void): (() => void) =>
+    subscribe(IPC.OVERLAY_TAB_MENU_DATA, cb),
   onCommandData: (cb: (payload: CommandPalettePayload | null) => void): (() => void) =>
     subscribe(IPC.OVERLAY_COMMAND_DATA, cb),
   onSidebarPeekState: (cb: (state: SidebarPeekState) => void): (() => void) =>

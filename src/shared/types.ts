@@ -21,6 +21,8 @@ export interface TabState {
   isHibernated: boolean
   /** Dossier parent dans la sidebar, ou null si à la racine. */
   parentFolderId: string | null
+  /** Nom personnalisé (« Renommer ») ; prioritaire sur `title` à l'affichage. null = titre auto. */
+  customTitle?: string | null
 }
 
 /** Dossier rétractable de la sidebar (espace / groupe d'onglets). */
@@ -115,6 +117,8 @@ export const IPC = {
   TAB_BACK: 'tab:back',
   TAB_FORWARD: 'tab:forward',
   TAB_RELOAD: 'tab:reload',
+  TAB_HIBERNATE: 'tab:hibernate', // send : hiberne manuellement un onglet (menu contextuel)
+  TAB_RENAME: 'tab:rename', // send : renomme un onglet (customTitle) via le menu contextuel
   VIEW_SET_SIDEBAR: 'view:setSidebar',
   SESSION_SAVE_UI: 'session:saveUi',
   OPEN_EXTERNAL: 'app:openExternal',
@@ -131,6 +135,8 @@ export const IPC = {
   OVERLAY_SITE_CONTROL: 'overlay:siteControl', // main -> Main : ouvrir les Contrôles du site
   OVERLAY_CLOSE: 'overlay:close', // overlay -> Main : fermer les Contrôles du site
   OVERLAY_SET_IGNORE: 'overlay:setIgnore', // overlay -> Main : capter/laisser passer la souris
+  OVERLAY_TAB_MENU: 'overlay:tabMenu', // main -> Main : clic droit sur un onglet (menu contextuel)
+  OVERLAY_TAB_MENU_CLOSE: 'overlay:tabMenuClose', // overlay -> Main : fermer le menu contextuel
   SIDEBAR_PEEK_OPEN: 'sidebar:peekOpen', // main -> Main : survol du bord gauche
   SIDEBAR_PEEK_CLOSE: 'sidebar:peekClose', // overlay -> Main : souris sortie du panneau
   SIDEBAR_SET_WIDTH: 'sidebar:setWidth', // overlay -> Main : drag de la poignée de resize (px)
@@ -141,6 +147,7 @@ export const IPC = {
   WINDOW_CLOSE: 'window:close',
   // Main -> Renderer (events)
   OVERLAY_SITE_CONTROL_DATA: 'overlay:siteControlData', // Main -> overlay : push données (ou null)
+  OVERLAY_TAB_MENU_DATA: 'overlay:tabMenuData', // Main -> overlay : ouvrir/fermer le menu (ou null)
   OVERLAY_COMMAND_DATA: 'overlay:commandData', // Main -> overlay : ouvrir/fermer la palette (ou null)
   HISTORY_OPEN: 'history:open', // Main -> Renderer : ouvrir/focus l'onglet prism://history/ (Ctrl+H)
   SIDEBAR_PEEK_STATE: 'sidebar:peekState', // Main -> overlay : ouverture/fermeture animée
@@ -202,6 +209,18 @@ export interface SidebarToggleMaskState {
   width: number
   /** Cible de l'animation : `true` = pleine largeur (dépli) ; `false` = 0 (repli). */
   expanded: boolean
+}
+
+/**
+ * Menu contextuel d'un onglet (clic droit), rendu dans la couche d'overlay (au-dessus de la vue
+ * web native). `x`/`y` sont en coordonnées client, alignées 1:1 sur la fenêtre principale.
+ */
+export interface TabMenuPayload {
+  tabId: string
+  url: string
+  isHibernated: boolean
+  x: number
+  y: number
 }
 
 /** Contexte d'ouverture de la palette de commande (façon Arc). */
