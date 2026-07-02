@@ -24,6 +24,10 @@ export class OverlayLayer {
   private siteControl: SiteControlPayload | null = null
   private command: CommandPalettePayload | null = null
   private peekOpen = false
+  // Largeur du peek mémorisée : conservée à la fermeture pour que le slide-out (`-translate-x-full`,
+  // relatif à la largeur de l'élément) sorte réellement le panneau de l'écran au lieu de le laisser
+  // déborder à `width: 0`.
+  private peekWidth = 256
   private lastHideAt = 0
 
   private readonly track = (): void => this.applyBounds()
@@ -91,12 +95,14 @@ export class OverlayLayer {
 
   openPeek(width: number): void {
     this.peekOpen = true
+    this.peekWidth = width
     this.send(IPC.SIDEBAR_PEEK_STATE, { open: true, width })
   }
 
   closePeek(): void {
     this.peekOpen = false
-    this.send(IPC.SIDEBAR_PEEK_STATE, { open: false, width: 0 })
+    // On garde `peekWidth` : indispensable au slide-out hors écran (cf. commentaire du champ).
+    this.send(IPC.SIDEBAR_PEEK_STATE, { open: false, width: this.peekWidth })
   }
 
   /** Bascule le click-through demandé par le renderer (hit-test des panneaux). */
@@ -158,7 +164,7 @@ export class OverlayLayer {
       // Resynchronise l'état courant après (re)chargement.
       this.send(IPC.OVERLAY_SITE_CONTROL_DATA, this.siteControl)
       this.send(IPC.OVERLAY_COMMAND_DATA, this.command)
-      this.send(IPC.SIDEBAR_PEEK_STATE, { open: this.peekOpen, width: 0 })
+      this.send(IPC.SIDEBAR_PEEK_STATE, { open: this.peekOpen, width: this.peekWidth })
     })
 
     const query = 'overlay=layer'
