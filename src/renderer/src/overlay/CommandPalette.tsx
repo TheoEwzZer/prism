@@ -112,7 +112,7 @@ export function CommandPalette({ data }: { data: CommandPalettePayload }): React
     <div
       ref={rootRef}
       data-overlay-hit="command"
-      className="pointer-events-auto absolute top-20 left-1/2 w-[640px] max-w-[90%] -translate-x-1/2"
+      className="pointer-events-auto absolute top-1/2 left-1/2 w-180 max-w-[90%] -translate-x-1/2 -translate-y-1/2"
     >
       <Command
         shouldFilter={false}
@@ -159,7 +159,7 @@ export function CommandPalette({ data }: { data: CommandPalettePayload }): React
                   <Favicon favicon={t.favicon} />
                   <span className="min-w-0 flex-1 truncate">{t.title || t.url || 'Onglet'}</span>
                   <span className="ml-auto flex shrink-0 items-center gap-1 text-xs text-slate-500">
-                    Switch to Tab
+                    Aller à l'onglet
                     <ArrowRight className="size-3.5" />
                   </span>
                 </CommandItem>
