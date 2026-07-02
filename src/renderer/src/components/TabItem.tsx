@@ -121,16 +121,7 @@ export const TabItem = memo(function TabItem({
       {/* `min-w-0` : indispensable pour que `truncate` puisse rétrécir sous la taille du texte. Au
           survol, on réserve à droite la place de la croix (`pr-6`) → le nom raccourcit et affiche `…`
           au lieu de passer sous la croix. */}
-      <span
-        className={cn('min-w-0 flex-1 truncate group-hover:pr-6', isHibernated && 'opacity-60')}
-      >
-        {displayName}
-      </span>
-
-      {/* Lune d'hibernation : cachée au survol (la croix occupe alors ce coin droit). */}
-      {isHibernated && (
-        <Moon className="size-3 shrink-0 text-slate-500 transition-opacity group-hover:opacity-0" />
-      )}
+      <span className={cn('min-w-0 flex-1 truncate group-hover:pr-6')}>{displayName}</span>
 
       {/* Croix en overlay (absolue) : toujours entièrement visible au survol, calée à droite, par
           DESSUS l'onglet — sa taille ne dépend jamais de la longueur du nom ni de la sidebar. */}
