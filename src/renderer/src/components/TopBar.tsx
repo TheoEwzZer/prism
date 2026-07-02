@@ -1,15 +1,4 @@
-import { useEffect, useState } from 'react'
-import {
-  Settings,
-  PanelLeft,
-  ArrowLeft,
-  ArrowRight,
-  RotateCw,
-  Minus,
-  Square,
-  Copy,
-  X
-} from 'lucide-react'
+import { Settings, PanelLeft, ArrowLeft, ArrowRight, RotateCw } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useTabsStore } from '@/store/tabsStore'
 import { Omnibox } from './Omnibox'
@@ -88,35 +77,15 @@ export function TopBar(): React.JSX.Element {
         </div>
       )}
 
-      {/* Zone droite — au-dessus de la zone web : URL centrée + contrôles fenêtre. */}
+      {/* Zone droite — au-dessus de la zone web : URL centrée. Les boutons min/agrandir/fermer
+          sont dessinés nativement par Windows (Window Controls Overlay, cf. index.ts) dans le
+          coin haut-droit → ils déclenchent les Snap Layouts. On réserve leur largeur à droite. */}
       <div className="relative flex h-full flex-1 items-center px-2">
-        <div className="flex-1" />
-        <WindowControls />
-
         {/* Omnibox centrée sur la zone web. */}
         <div className="app-no-drag absolute left-1/2 w-[420px] max-w-[42%] -translate-x-1/2">
           <Omnibox />
         </div>
       </div>
-    </div>
-  )
-}
-
-function WindowControls(): React.JSX.Element {
-  const [maximized, setMaximized] = useState(false)
-  useEffect(() => window.prism.onWindowState((s) => setMaximized(s.isMaximized)), [])
-
-  return (
-    <div className="app-no-drag flex items-center gap-0.5">
-      <WindowButton label="Réduire" onClick={() => window.prism.minimizeWindow()}>
-        <Minus className="size-3.5" />
-      </WindowButton>
-      <WindowButton label="Agrandir" onClick={() => window.prism.toggleMaximizeWindow()}>
-        {maximized ? <Copy className="size-3" /> : <Square className="size-3" />}
-      </WindowButton>
-      <WindowButton label="Fermer" danger onClick={() => window.prism.closeWindow()}>
-        <X className="size-3.5" />
-      </WindowButton>
     </div>
   )
 }
@@ -146,31 +115,6 @@ function IconButton({
           ? 'bg-primary/20 text-primary hover:bg-primary/30'
           : 'text-slate-400 hover:bg-white/10 hover:text-white',
         'disabled:pointer-events-none disabled:opacity-30'
-      )}
-    >
-      {children}
-    </button>
-  )
-}
-
-function WindowButton({
-  children,
-  onClick,
-  label,
-  danger
-}: {
-  children: React.ReactNode
-  onClick: () => void
-  label: string
-  danger?: boolean
-}): React.JSX.Element {
-  return (
-    <button
-      aria-label={label}
-      onClick={onClick}
-      className={cn(
-        'flex size-6 items-center justify-center rounded-md text-slate-400 transition-colors',
-        danger ? 'hover:bg-red-500 hover:text-white' : 'hover:bg-white/10 hover:text-white'
       )}
     >
       {children}

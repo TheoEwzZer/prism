@@ -14,8 +14,16 @@ function createWindow(): void {
     minWidth: 800,
     minHeight: 560,
     show: false,
-    // Fenêtre "frameless" : on supprime la barre de titre Windows, l'UI monte tout en haut.
-    frame: false,
+    // Barre de titre masquée mais boutons natifs conservés (Window Controls Overlay) : Windows
+    // dessine min/agrandir/fermer en haut à droite → les Snap Layouts (menu de disposition au
+    // survol du bouton agrandir) fonctionnent nativement. Le reste de la barre reste custom.
+    // `color`/`symbolColor` matchent la couleur `--sidebar` ; `height` = classe `h-8` de <TopBar>.
+    titleBarStyle: 'hidden',
+    titleBarOverlay: {
+      color: '#04040a',
+      symbolColor: '#dddde5',
+      height: 32
+    },
     backgroundColor: '#0b0b12',
     autoHideMenuBar: true,
     ...(process.platform === 'linux' ? { icon } : {}),
