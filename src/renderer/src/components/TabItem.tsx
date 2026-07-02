@@ -62,7 +62,7 @@ export const TabItem = memo(function TabItem({
       {...drag?.attributes}
       {...drag?.listeners}
       className={cn(
-        'group flex h-8 cursor-default items-center gap-2 rounded-lg px-2 text-sm',
+        'group relative flex h-8 cursor-default items-center gap-2 rounded-lg pl-2 pr-2 text-sm',
         'transition-colors',
         isActive ? 'bg-white/10 text-white' : 'text-slate-300 hover:bg-white/5',
         drag?.isDragging && 'opacity-40'
@@ -78,19 +78,32 @@ export const TabItem = memo(function TabItem({
         )}
       </span>
 
-      <span className={cn('flex-1 truncate', isHibernated && 'opacity-60')}>
+      {/* `min-w-0` : indispensable pour que `truncate` puisse rétrécir sous la taille du texte. Au
+          survol, on réserve à droite la place de la croix (`pr-6`) → le nom raccourcit et affiche `…`
+          au lieu de passer sous la croix. */}
+      <span
+        className={cn('min-w-0 flex-1 truncate group-hover:pr-6', isHibernated && 'opacity-60')}
+      >
         {title || 'Nouvel onglet'}
       </span>
 
-      {isHibernated && <Moon className="size-3 shrink-0 text-slate-500" />}
+      {/* Lune d'hibernation : cachée au survol (la croix occupe alors ce coin droit). */}
+      {isHibernated && (
+        <Moon className="size-3 shrink-0 text-slate-500 transition-opacity group-hover:opacity-0" />
+      )}
 
+      {/* Croix en overlay (absolue) : toujours entièrement visible au survol, calée à droite, par
+          DESSUS l'onglet — sa taille ne dépend jamais de la longueur du nom ni de la sidebar. */}
       <button
         aria-label="Fermer l'onglet"
         onClick={close}
         // Empêche le drag de démarrer quand on clique la croix (le pointer-down remonterait
         // sinon aux listeners du row et lancerait un tri).
         onPointerDown={(e) => e.stopPropagation()}
-        className="flex size-5 shrink-0 items-center justify-center rounded opacity-0 transition-opacity group-hover:opacity-100 hover:bg-white/15"
+        className={cn(
+          'absolute top-1/2 right-1 flex size-5 -translate-y-1/2 items-center justify-center rounded',
+          'text-slate-300 opacity-0 transition-opacity group-hover:opacity-100 hover:bg-white/15'
+        )}
       >
         <X className="size-3.5" />
       </button>

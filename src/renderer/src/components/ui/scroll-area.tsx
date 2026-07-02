@@ -16,7 +16,10 @@ function ScrollArea({
     >
       <ScrollAreaPrimitive.Viewport
         data-slot="scroll-area-viewport"
-        className="size-full rounded-[inherit] transition-[color,box-shadow] outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-1"
+        // `[&>div]:!block` : Radix enveloppe le contenu dans un `display:table` (min-width:100%) qui
+        // dimensionne la largeur sur le plus long enfant → `truncate` ne se déclenche jamais. On force
+        // ce wrapper interne en `block` (largeur = viewport) pour que les onglets tronquent vraiment.
+        className="size-full rounded-[inherit] transition-[color,box-shadow] outline-none [&>div]:!block focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-1"
       >
         {children}
       </ScrollAreaPrimitive.Viewport>
