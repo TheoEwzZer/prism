@@ -14,7 +14,9 @@ import {
   type SidebarPeekState,
   type SidebarToggleMaskState,
   type CommandPalettePayload,
-  type HistoryEntry
+  type HistoryEntry,
+  type HistoryListInput,
+  type HistoryListResult
 } from '@shared/types'
 
 /** Abonnement typé à un event Main -> Renderer ; retourne une fonction de désabonnement. */
@@ -52,6 +54,16 @@ const prism = {
   removeHistory: (url: string): void => ipcRenderer.send(IPC.HISTORY_REMOVE, url),
   getSuggestions: (query: string): Promise<string[]> =>
     ipcRenderer.invoke(IPC.SUGGEST_QUERY, query),
+
+  // Page Historique (Ctrl+H)
+  listHistory: (input: HistoryListInput): Promise<HistoryListResult> =>
+    ipcRenderer.invoke(IPC.HISTORY_LIST, input),
+  removeVisit: (id: string): void => ipcRenderer.send(IPC.HISTORY_REMOVE_VISIT, id),
+  clearHistory: (since?: number): void => ipcRenderer.send(IPC.HISTORY_CLEAR, since),
+  openHistory: (): void => ipcRenderer.send(IPC.OVERLAY_HISTORY),
+  closeHistory: (): void => ipcRenderer.send(IPC.OVERLAY_HISTORY_CLOSE),
+  onHistoryData: (cb: (open: boolean) => void): (() => void) =>
+    subscribe(IPC.OVERLAY_HISTORY_DATA, cb),
 
   // Couche d'overlay unique (au-dessus de la page). Depuis la fenêtre principale :
   openSiteControl: (payload: SiteControlPayload): void =>

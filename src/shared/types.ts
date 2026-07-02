@@ -96,8 +96,11 @@ export const IPC = {
   SESSION_SAVE_UI: 'session:saveUi',
   OPEN_EXTERNAL: 'app:openExternal',
   CLIPBOARD_WRITE: 'app:clipboardWrite',
-  HISTORY_SEARCH: 'history:search', // invoke : recherche dans l'historique local
-  HISTORY_REMOVE: 'history:remove', // send : supprime une entrée d'historique
+  HISTORY_SEARCH: 'history:search', // invoke : recherche dans l'historique local (frecency)
+  HISTORY_REMOVE: 'history:remove', // send : supprime toutes les visites d'une URL (palette)
+  HISTORY_LIST: 'history:list', // invoke : page chronologique de l'historique (page Historique)
+  HISTORY_REMOVE_VISIT: 'history:removeVisit', // send : supprime une visite précise (par id)
+  HISTORY_CLEAR: 'history:clear', // send : efface l'historique (tout ou depuis un timestamp)
   SUGGEST_QUERY: 'suggest:query', // invoke : suggestions de recherche (Google Suggest)
   // Couche d'overlay unique : UNE fenêtre transparente persistante qui recouvre toute la zone
   // contenu et flotte AU-DESSUS de la WebContentsView (peek de la sidebar + Contrôles du site
@@ -109,12 +112,15 @@ export const IPC = {
   SIDEBAR_PEEK_CLOSE: 'sidebar:peekClose', // overlay -> Main : souris sortie du panneau
   OVERLAY_COMMAND: 'overlay:command', // main/Main -> Main : ouvrir la palette de commande
   OVERLAY_COMMAND_CLOSE: 'overlay:commandClose', // overlay -> Main : fermer la palette
+  OVERLAY_HISTORY: 'overlay:history', // main/Main -> Main : basculer la page Historique (Ctrl+H)
+  OVERLAY_HISTORY_CLOSE: 'overlay:historyClose', // overlay -> Main : fermer la page Historique
   WINDOW_MINIMIZE: 'window:minimize',
   WINDOW_MAXIMIZE: 'window:maximize',
   WINDOW_CLOSE: 'window:close',
   // Main -> Renderer (events)
   OVERLAY_SITE_CONTROL_DATA: 'overlay:siteControlData', // Main -> overlay : push données (ou null)
   OVERLAY_COMMAND_DATA: 'overlay:commandData', // Main -> overlay : ouvrir/fermer la palette (ou null)
+  OVERLAY_HISTORY_DATA: 'overlay:historyData', // Main -> overlay : ouvrir/fermer la page Historique
   SIDEBAR_PEEK_STATE: 'sidebar:peekState', // Main -> overlay : ouverture/fermeture animée
   SIDEBAR_TOGGLE_MASK: 'sidebar:toggleMask', // Main -> overlay : masque animé du repli/dépli sidebar
   UI_STATE_SYNC: 'ui:stateSync', // Main -> autres fenêtres : convergence de l'état organisationnel
@@ -189,7 +195,10 @@ export interface CommandPalettePayload {
   initialQuery?: string
 }
 
-/** Entrée d'historique de navigation (persistée). */
+/**
+ * Entrée d'historique AGRÉGÉE par URL (frecency). Sert la palette de commande, dérivée du
+ * journal des visites.
+ */
 export interface HistoryEntry {
   url: string
   title: string
@@ -198,4 +207,35 @@ export interface HistoryEntry {
   visitCount: number
   /** Timestamp (ms) de la dernière visite. */
   lastVisit: number
+}
+
+/**
+ * Visite individuelle (une ligne par navigation), source de vérité de l'historique. La page
+ * Historique (Ctrl+H) affiche ces visites groupées par jour ; l'agrégat frecency en est dérivé.
+ */
+export interface VisitEntry {
+  /** Identifiant stable d'une visite (suppression unitaire). */
+  id: string
+  url: string
+  title: string
+  favicon: string | null
+  /** Timestamp (ms) de la visite. */
+  ts: number
+}
+
+/** Requête paginée de la page Historique (filtrage + pagination côté Main). */
+export interface HistoryListInput {
+  /** Filtre plein texte (title/url), insensible à la casse. */
+  query?: string
+  /** Nombre de visites déjà chargées (défilement infini). */
+  offset?: number
+  /** Taille de page (borne côté Main). */
+  limit?: number
+}
+
+/** Page de visites renvoyée par le Main (triée du plus récent au plus ancien). */
+export interface HistoryListResult {
+  items: VisitEntry[]
+  /** Reste-t-il des visites au-delà de cette page (pour le défilement infini) ? */
+  hasMore: boolean
 }

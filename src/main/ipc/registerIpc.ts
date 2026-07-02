@@ -8,7 +8,8 @@ import {
   type UiPersistState,
   type UiSyncState,
   type SiteControlPayload,
-  type CommandPalettePayload
+  type CommandPalettePayload,
+  type HistoryListInput
 } from '@shared/types'
 import { TabManager } from '../tabs/TabManager'
 import { OverlayLayer } from '../overlay/OverlayLayer'
@@ -18,7 +19,10 @@ import {
   recordVisit,
   updateMeta,
   searchHistory,
+  listHistory,
   removeEntry,
+  removeVisit,
+  clearHistory,
   flushHistory
 } from '../persistence/historyStore'
 
@@ -179,6 +183,7 @@ export function setupBrowser(window: BrowserWindow, initialSession: SessionData)
     window,
     emitPatch,
     () => overlay.toggleCommand({ mode: 'newTab', activeId: tabManager.getActiveTabId() }),
+    () => overlay.toggleHistory(),
     { visit: recordVisit, updateMeta }
   )
 
@@ -258,6 +263,9 @@ export function setupBrowser(window: BrowserWindow, initialSession: SessionData)
     searchHistory(payload.query, payload.limit)
   )
   ipcMain.on(IPC.HISTORY_REMOVE, (_e, url: string) => removeEntry(url))
+  ipcMain.handle(IPC.HISTORY_LIST, (_e, input: HistoryListInput) => listHistory(input ?? {}))
+  ipcMain.on(IPC.HISTORY_REMOVE_VISIT, (_e, id: string) => removeVisit(id))
+  ipcMain.on(IPC.HISTORY_CLEAR, (_e, since?: number) => clearHistory(since))
   ipcMain.handle(IPC.SUGGEST_QUERY, (_e, query: string) => fetchSuggestions(query))
 
   // Couche d'overlay unique (au-dessus de la page).
@@ -269,6 +277,8 @@ export function setupBrowser(window: BrowserWindow, initialSession: SessionData)
     overlay.toggleCommand(payload)
   )
   ipcMain.on(IPC.OVERLAY_COMMAND_CLOSE, () => overlay.hideCommand())
+  ipcMain.on(IPC.OVERLAY_HISTORY, () => overlay.toggleHistory())
+  ipcMain.on(IPC.OVERLAY_HISTORY_CLOSE, () => overlay.hideHistory())
   ipcMain.on(IPC.OVERLAY_SET_IGNORE, (_e, ignore: boolean) => overlay.setIgnore(ignore))
   ipcMain.on(IPC.SIDEBAR_PEEK_OPEN, () => overlay.openPeek(session.sidebarWidth))
   ipcMain.on(IPC.SIDEBAR_PEEK_CLOSE, () => overlay.closePeek())
@@ -322,10 +332,20 @@ export function setupBrowser(window: BrowserWindow, initialSession: SessionData)
     tabManager.dispose()
     overlay.dispose()
     // Retrait des handlers pour éviter les doublons en cas de recréation de fenêtre.
-    for (const ch of [IPC.SESSION_GET, IPC.TAB_CREATE, IPC.HISTORY_SEARCH, IPC.SUGGEST_QUERY]) {
+    for (const ch of [
+      IPC.SESSION_GET,
+      IPC.TAB_CREATE,
+      IPC.HISTORY_SEARCH,
+      IPC.HISTORY_LIST,
+      IPC.SUGGEST_QUERY
+    ]) {
       ipcMain.removeHandler(ch)
     }
     ipcMain.removeAllListeners(IPC.HISTORY_REMOVE)
+    ipcMain.removeAllListeners(IPC.HISTORY_REMOVE_VISIT)
+    ipcMain.removeAllListeners(IPC.HISTORY_CLEAR)
+    ipcMain.removeAllListeners(IPC.OVERLAY_HISTORY)
+    ipcMain.removeAllListeners(IPC.OVERLAY_HISTORY_CLOSE)
     ipcMain.removeAllListeners(IPC.TAB_CLOSE)
     ipcMain.removeAllListeners(IPC.TAB_ACTIVATE)
     ipcMain.removeAllListeners(IPC.TAB_NAVIGATE)

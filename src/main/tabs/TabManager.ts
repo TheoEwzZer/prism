@@ -50,6 +50,8 @@ export class TabManager {
     private readonly emitPatch: EmitPatch,
     /** Ouvre la palette de commande (Ctrl+T depuis une page ayant le focus). */
     private readonly onCommandShortcut: () => void = () => {},
+    /** Ouvre la page Historique (Ctrl+H depuis une page ayant le focus). */
+    private readonly onHistoryShortcut: () => void = () => {},
     /** Hooks d'historique (optionnels). */
     private readonly history?: HistoryHooks
   ) {
@@ -189,6 +191,11 @@ export class TabManager {
         // cette WebContentsView → on capture ici et on délègue au runtime pour l'ouvrir.
         event.preventDefault()
         this.onCommandShortcut()
+      } else if (isHistoryShortcut(input)) {
+        // Ctrl+H frappé alors qu'une page a le focus : idem, on délègue l'ouverture de la page
+        // Historique (rendue dans la couche d'overlay).
+        event.preventDefault()
+        this.onHistoryShortcut()
       }
     })
 
@@ -395,6 +402,12 @@ function isDevToolsShortcut(input: Electron.Input): boolean {
   if (input.type !== 'keyDown') return false
   if (input.key === 'F12') return true
   return input.control && input.shift && input.key.toLowerCase() === 'i'
+}
+
+/** Détecte Ctrl+H (keydown) pour ouvrir la page Historique. */
+function isHistoryShortcut(input: Electron.Input): boolean {
+  if (input.type !== 'keyDown') return false
+  return input.control && !input.shift && !input.alt && input.key.toLowerCase() === 'h'
 }
 
 /** Détecte Ctrl+T (keydown) pour ouvrir la palette de commande. */

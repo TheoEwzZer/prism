@@ -28,6 +28,7 @@ export class OverlayLayer {
   private ready = false
   private siteControl: SiteControlPayload | null = null
   private command: CommandPalettePayload | null = null
+  private historyOpen = false
   private peekOpen = false
   // Largeur du peek mémorisée : conservée à la fermeture pour que le slide-out (`-translate-x-full`,
   // relatif à la largeur de l'élément) sorte réellement le panneau de l'écran au lieu de le laisser
@@ -98,6 +99,30 @@ export class OverlayLayer {
     this.command = null
     this.lastHideAt = Date.now()
     this.send(IPC.OVERLAY_COMMAND_DATA, null)
+  }
+
+  /**
+   * Page Historique plein écran (Ctrl+H, façon Arc). Comme la palette, elle prend le focus (pour
+   * le champ de filtre / la navigation clavier) et se ferme sur Échap ou via son bouton. Toggle :
+   * rouvrir alors qu'elle est ouverte la referme.
+   */
+  toggleHistory(): void {
+    if (this.historyOpen) {
+      this.hideHistory()
+      return
+    }
+    if (Date.now() - this.lastHideAt < 250) return
+    this.historyOpen = true
+    const win = this.ensureWindow()
+    win.focus()
+    this.send(IPC.OVERLAY_HISTORY_DATA, true)
+  }
+
+  hideHistory(): void {
+    if (!this.historyOpen) return
+    this.historyOpen = false
+    this.lastHideAt = Date.now()
+    this.send(IPC.OVERLAY_HISTORY_DATA, false)
   }
 
   openPeek(width: number): void {
@@ -224,6 +249,7 @@ export class OverlayLayer {
       // Resynchronise l'état courant après (re)chargement.
       this.send(IPC.OVERLAY_SITE_CONTROL_DATA, this.siteControl)
       this.send(IPC.OVERLAY_COMMAND_DATA, this.command)
+      this.send(IPC.OVERLAY_HISTORY_DATA, this.historyOpen)
       this.send(IPC.SIDEBAR_PEEK_STATE, { open: this.peekOpen, width: this.peekWidth })
     })
 

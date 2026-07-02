@@ -14,16 +14,21 @@ function App(): React.JSX.Element {
   useSidebarLayout() // émet les intentions de layout vers le Main
   usePersistUiState(ready) // persiste l'état UI organisationnel
 
-  // Ctrl+T lorsque le chrome React a le focus → palette de commande. (Quand c'est une page qui a
-  // le focus, le raccourci est capté côté Main dans TabManager.before-input-event.)
+  // Raccourcis lorsque le chrome React a le focus. (Quand c'est une page qui a le focus, ils sont
+  // captés côté Main dans TabManager.before-input-event.) Ctrl+T → palette ; Ctrl+H → historique.
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
-      if (e.ctrlKey && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 't') {
+      if (!e.ctrlKey || e.shiftKey || e.altKey) return
+      const key = e.key.toLowerCase()
+      if (key === 't') {
         e.preventDefault()
         window.prism.openCommandPalette({
           mode: 'newTab',
           activeId: useTabsStore.getState().activeTabId
         })
+      } else if (key === 'h') {
+        e.preventDefault()
+        window.prism.openHistory()
       }
     }
     window.addEventListener('keydown', onKey)

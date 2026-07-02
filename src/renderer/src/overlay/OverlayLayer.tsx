@@ -12,6 +12,7 @@ import { PeekSidebar } from './PeekSidebar'
 import { SidebarToggleMask } from './SidebarToggleMask'
 import { SiteControlPopover } from './SiteControlPopover'
 import { CommandPalette } from './CommandPalette'
+import { HistoryPage } from './HistoryPage'
 
 const PEEK_ARM_MS = 150
 
@@ -36,6 +37,7 @@ export function OverlayLayer(): React.JSX.Element {
   })
   const [site, setSite] = useState<SiteControlPayload | null>(null)
   const [command, setCommand] = useState<CommandPalettePayload | null>(null)
+  const [historyOpen, setHistoryOpen] = useState(false)
 
   useTabEvents() // patchs + convergence de l'état organisationnel relayés par le Main
   usePersistUiState(ready) // le peek est pleinement fonctionnel : ses changements remontent au Main
@@ -52,6 +54,7 @@ export function OverlayLayer(): React.JSX.Element {
   useEffect(() => window.prism.onSidebarToggleMask(setToggleMask), [])
   useEffect(() => window.prism.onSiteControlData(setSite), [])
   useEffect(() => window.prism.onCommandData(setCommand), [])
+  useEffect(() => window.prism.onHistoryData(setHistoryOpen), [])
 
   // --- Click-through : hit-test global ---
   const ignoreRef = useRef(true)
@@ -61,6 +64,7 @@ export function OverlayLayer(): React.JSX.Element {
   const peekOpenRef = useRef(false)
   const anyOpenRef = useRef(false)
   const armedRef = useRef(false)
+  const historyOpenRef = useRef(false)
 
   const setIgnore = (ignore: boolean): void => {
     if (ignoreRef.current === ignore) return
@@ -69,6 +73,12 @@ export function OverlayLayer(): React.JSX.Element {
   }
 
   const hitTest = (x: number, y: number): void => {
+    // Page Historique plein écran : elle capte toute la souris (y compris ses popovers portés
+    // hors du conteneur `[data-overlay-hit]`) → on garde la capture sans hit-test ponctuel.
+    if (historyOpenRef.current) {
+      setIgnore(false)
+      return
+    }
     // Drag & drop en cours dans le peek : on garde la capture souris et on ne ferme pas le peek,
     // même si le curseur survole le DragOverlay (hors `[data-overlay-hit]`).
     if (document.body.hasAttribute('data-dnd-dragging')) {
@@ -108,10 +118,11 @@ export function OverlayLayer(): React.JSX.Element {
   }, [])
 
   // Réagit aux changements d'ouverture : (dé)verrouille la capture et arme la fermeture du peek.
-  const anyOpen = peek.open || site !== null || command !== null
+  const anyOpen = peek.open || site !== null || command !== null || historyOpen
   useEffect(() => {
     anyOpenRef.current = anyOpen
     peekOpenRef.current = peek.open
+    historyOpenRef.current = historyOpen
     if (!anyOpen) {
       setIgnore(true)
       armedRef.current = false
@@ -128,7 +139,7 @@ export function OverlayLayer(): React.JSX.Element {
     hitTest(lastPos.current.x, lastPos.current.y)
     return undefined
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [anyOpen, peek.open])
+  }, [anyOpen, peek.open, historyOpen])
 
   // Contrôles du site : menu au clic → fermeture sur clic extérieur (blur) ou Échap.
   useEffect(() => {
@@ -167,6 +178,7 @@ export function OverlayLayer(): React.JSX.Element {
       <SidebarToggleMask state={toggleMask} />
       {site && <SiteControlPopover data={site} />}
       {command && <CommandPalette data={command} />}
+      {historyOpen && <HistoryPage />}
     </div>
   )
 }
