@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef, useState } from 'react'
-import { Copy, Pencil, Columns2 } from 'lucide-react'
+import { Copy, Pencil, Columns2, CopyPlus } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { TabMenuPayload } from '@shared/types'
 
@@ -47,6 +47,12 @@ export function TabContextMenu({ data }: Readonly<{ data: TabMenuPayload }>): Re
     close()
   }
 
+  const duplicateTab = (): void => {
+    if (url) window.prism.createTab({ url })
+    else window.prism.createTab({})
+    close()
+  }
+
   return (
     <div
       ref={rootRef}
@@ -64,6 +70,11 @@ export function TabContextMenu({ data }: Readonly<{ data: TabMenuPayload }>): Re
         onClick={copyUrl}
       />
       <Row icon={<Pencil className="size-4" />} label="Renommer" onClick={rename} />
+      <Row
+        icon={<CopyPlus className="size-4" />}
+        label="Dupliquer"
+        onClick={duplicateTab}
+      />
       <Row
         icon={<Columns2 className="size-4" />}
         label="Ajouter une vue divisée"
