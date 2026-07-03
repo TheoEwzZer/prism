@@ -46,6 +46,8 @@ interface TabsState {
   /** Onglets « favoris » (épinglés), dans l'ordre de la liste de favoris. Source de vérité de
    *  l'appartenance ET de l'ordre des favoris ; les onglets « actuels » = racine ∉ pinnedIds. */
   pinnedIds: string[]
+  /** URLs de base des onglets épinglés (id -> url). */
+  pinnedUrls: Record<string, string>
   folders: FolderState[]
   /** Vues divisées actives (façon Arc). Leurs onglets membres ne sont pas listés séparément. */
   splits: SplitState[]
@@ -67,6 +69,8 @@ interface TabsState {
   setSidebarCollapsed: (collapsed: boolean) => void
   setSidebarWidth: (width: number) => void
   setRenamingTab: (id: string | null) => void
+  /** Modifie l'URL de base d'un onglet épinglé (depuis le menu contextuel). */
+  setPinnedUrl: (id: string, url: string) => void
   /**
    * Commit d'un déplacement drag & drop : réécrit la liste des favoris (`fav`) et l'ordre des
    * onglets actuels (`cur`). `order` est reconstruit avec les actuels en tête (l'ordre des
@@ -83,6 +87,7 @@ export const useTabsStore = create<TabsState>((set, get) => ({
   tabs: {},
   order: [],
   pinnedIds: [],
+  pinnedUrls: {},
   folders: [],
   splits: [],
   activeTabId: null,
@@ -100,10 +105,18 @@ export const useTabsStore = create<TabsState>((set, get) => ({
     const pinnedIds = (session.pinnedTabIds ?? []).filter(
       (id) => tabs[id] && tabs[id].parentFolderId === null
     )
+    const pinnedUrls = { ...(session.pinnedUrls ?? {}) }
+    for (const id of pinnedIds) {
+      if (!pinnedUrls[id] && tabs[id]) {
+        pinnedUrls[id] = tabs[id].url
+      }
+    }
+
     set({
       tabs,
       order,
       pinnedIds,
+      pinnedUrls,
       folders: session.folders,
       splits: validSplits(session.splits ?? [], tabs),
       activeTabId: session.activeTabId,
@@ -200,7 +213,22 @@ export const useTabsStore = create<TabsState>((set, get) => ({
       // `order` : actuels en tête, puis le reste (favoris + enfants de dossiers) tel quel.
       const curSet = new Set(cur)
       const rest = state.order.filter((id) => !curSet.has(id))
-      return { pinnedIds: fav, order: [...cur, ...rest] }
+      
+      const pinnedUrls = { ...state.pinnedUrls }
+      // Initialize base URL for newly pinned tabs
+      for (const id of fav) {
+        if (!state.pinnedIds.includes(id) && state.tabs[id]) {
+          pinnedUrls[id] = state.tabs[id].url
+        }
+      }
+      // Optional: Cleanup pinnedUrls for tabs that are no longer pinned
+      for (const id of Object.keys(pinnedUrls)) {
+        if (!fav.includes(id)) {
+          delete pinnedUrls[id]
+        }
+      }
+
+      return { pinnedIds: fav, pinnedUrls, order: [...cur, ...rest] }
     })
   },
 
@@ -220,6 +248,7 @@ export const useTabsStore = create<TabsState>((set, get) => ({
         return {
           order,
           pinnedIds,
+          pinnedUrls: sync.pinnedUrls ?? {},
           folders: sync.folders,
           splits: validSplits(sync.splits ?? [], state.tabs),
           activeTabId: sync.activeTabId
@@ -235,11 +264,19 @@ export const useTabsStore = create<TabsState>((set, get) => ({
     return {
       order: s.order,
       pinnedTabIds: s.pinnedIds,
+      pinnedUrls: s.pinnedUrls,
       folders: s.folders,
       splits: validSplits(s.splits, s.tabs),
       activeTabId: s.activeTabId,
       sidebarWidth: s.sidebarWidth,
       sidebarCollapsed: s.sidebarCollapsed
     }
+  },
+
+  setPinnedUrl: (id, url): void => {
+    set((state) => {
+      if (!state.pinnedIds.includes(id)) return {}
+      return { pinnedUrls: { ...state.pinnedUrls, [id]: url } }
+    })
   }
 }))

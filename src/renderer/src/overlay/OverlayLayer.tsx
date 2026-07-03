@@ -224,7 +224,7 @@ export function OverlayLayer(): React.JSX.Element {
     // la fenêtre principale, eux, ferment déjà via `blur`.)
     const onDown = (e: PointerEvent): void => {
       const el = e.target as HTMLElement | null
-      if (!el?.closest('[data-overlay-hit="tabmenu"]')) window.prism.closeTabMenu()
+      if (!el?.closest('[data-overlay-hit="tabmenu"]') && !el?.closest('[data-overlay-hit="dialog"]')) window.prism.closeTabMenu()
     }
     window.addEventListener('blur', onBlur)
     window.addEventListener('keydown', onKey)
@@ -256,7 +256,7 @@ export function OverlayLayer(): React.JSX.Element {
     }
     const onDown = (e: PointerEvent): void => {
       const el = e.target as HTMLElement | null
-      if (!el?.closest('[data-overlay-hit="splitmenu"]')) window.prism.closeSplitMenu()
+      if (!el?.closest('[data-overlay-hit="splitmenu"]') && !el?.closest('[data-overlay-hit="dialog"]')) window.prism.closeSplitMenu()
     }
     window.addEventListener('blur', onBlur)
     window.addEventListener('keydown', onKey)
@@ -277,7 +277,7 @@ export function OverlayLayer(): React.JSX.Element {
     }
     const onDown = (e: PointerEvent): void => {
       const el = e.target as HTMLElement | null
-      if (!el?.closest('[data-overlay-hit="panemenu"]')) window.prism.closePaneMenu()
+      if (!el?.closest('[data-overlay-hit="panemenu"]') && !el?.closest('[data-overlay-hit="dialog"]')) window.prism.closePaneMenu()
     }
     window.addEventListener('blur', onBlur)
     window.addEventListener('keydown', onKey)
@@ -299,7 +299,7 @@ export function OverlayLayer(): React.JSX.Element {
     }
     const onDown = (e: PointerEvent): void => {
       const el = e.target as HTMLElement | null
-      if (!el?.closest('[data-overlay-hit="pagemenu"]')) window.prism.closePageMenu()
+      if (!el?.closest('[data-overlay-hit="pagemenu"]') && !el?.closest('[data-overlay-hit="dialog"]')) window.prism.closePageMenu()
     }
     window.addEventListener('blur', onBlur)
     window.addEventListener('keydown', onKey)

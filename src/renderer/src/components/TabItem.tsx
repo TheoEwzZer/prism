@@ -1,9 +1,22 @@
 import { memo, useEffect, useRef, useState } from 'react'
-import { X, Globe, Loader2 } from 'lucide-react'
+import { X, Globe, Loader2, Minus } from 'lucide-react'
 import type { DraggableAttributes } from '@dnd-kit/core'
 import type { SyntheticListenerMap } from '@dnd-kit/core/dist/hooks/utilities'
 import { cn } from '@/lib/utils'
 import { useTabsStore } from '@/store/tabsStore'
+
+function normalizeUrl(u?: string): string {
+  if (!u) return ''
+  try {
+    const urlStr = u.includes('://') ? u : `https://${u}`
+    const parsed = new URL(urlStr)
+    parsed.hostname = parsed.hostname.replace(/^www\./, '')
+    parsed.protocol = 'https:'
+    return parsed.href.replace(/\/$/, '')
+  } catch {
+    return u.replace(/\/$/, '')
+  }
+}
 
 /**
  * Liaison drag & drop injectée par le wrapper sortable (`SortableTab`). Optionnelle : les
@@ -38,6 +51,9 @@ export const TabItem = memo(function TabItem({
   const isLoading = useTabsStore((s) => s.tabs[id]?.isLoading)
   const isHibernated = useTabsStore((s) => s.tabs[id]?.isHibernated)
   const isActive = useTabsStore((s) => s.activeTabId === id)
+  const isPinned = useTabsStore((s) => s.pinnedIds.includes(id))
+  const pinnedUrl = useTabsStore((s) => s.pinnedUrls[id])
+  const hasDeviated = isPinned && pinnedUrl && normalizeUrl(pinnedUrl) !== normalizeUrl(url)
 
   const renaming = useTabsStore((s) => s.renamingTabId === id)
 
@@ -95,9 +111,13 @@ export const TabItem = memo(function TabItem({
     removeTab(id)
   }
 
-  const close = (e: React.MouseEvent): void => {
+  const closeOrReset = (e: React.MouseEvent): void => {
     e.stopPropagation()
-    doClose()
+    if (hasDeviated && pinnedUrl) {
+      window.prism.navigate(id, pinnedUrl)
+    } else {
+      doClose()
+    }
   }
 
   // Clic molette (bouton du milieu) = fermer l'onglet, façon Arc. `auxclick` ne se déclenche que
@@ -180,9 +200,9 @@ export const TabItem = memo(function TabItem({
           DESSUS l'onglet — sa taille ne dépend jamais de la longueur du nom ni de la sidebar. */}
       {!renaming && (
         <button
-          aria-label="Fermer l'onglet"
-          onClick={close}
-          // Empêche le drag de démarrer quand on clique la croix (le pointer-down remonterait
+          aria-label={hasDeviated ? "Retourner à l'URL épinglée" : "Fermer l'onglet"}
+          onClick={closeOrReset}
+          // Empêche le drag de démarrer quand on clique la croix/le moins (le pointer-down remonterait
           // sinon aux listeners du row et lancerait un tri).
           onPointerDown={(e) => e.stopPropagation()}
           className={cn(
@@ -190,7 +210,7 @@ export const TabItem = memo(function TabItem({
             'text-slate-300 opacity-0 transition-opacity group-hover:opacity-100 hover:bg-white/15'
           )}
         >
-          <X className="size-3.5" />
+          {hasDeviated ? <Minus className="size-3.5" /> : <X className="size-3.5" />}
         </button>
       )}
     </div>

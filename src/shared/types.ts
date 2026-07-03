@@ -213,6 +213,8 @@ export interface SessionData {
   order: string[]
   /** Onglets « favoris » (épinglés), dans l'ordre de la liste de favoris de la sidebar. */
   pinnedTabIds: string[]
+  /** URLs de base des onglets épinglés (id -> url). */
+  pinnedUrls?: Record<string, string>
   /** Vues divisées actives (façon Arc). */
   splits: SplitState[]
   activeTabId: string | null
@@ -233,6 +235,7 @@ export interface TabUpdateBatch {
 export interface UiPersistState {
   order: string[]
   pinnedTabIds: string[]
+  pinnedUrls?: Record<string, string>
   folders: FolderState[]
   splits: SplitState[]
   activeTabId: string | null
@@ -248,6 +251,7 @@ export interface UiPersistState {
 export interface UiSyncState {
   order: string[]
   pinnedTabIds: string[]
+  pinnedUrls?: Record<string, string>
   folders: FolderState[]
   splits: SplitState[]
   activeTabId: string | null

@@ -238,6 +238,7 @@ export function setupBrowser(window: BrowserWindow, initialSession: SessionData)
       folders: session.folders,
       order: session.order,
       pinnedTabIds: session.pinnedTabIds,
+      pinnedUrls: session.pinnedUrls,
       splits: session.splits,
       activeTabId: tabManager.getActiveTabId() ?? session.activeTabId,
       sidebarWidth: session.sidebarWidth,
@@ -275,6 +276,7 @@ export function setupBrowser(window: BrowserWindow, initialSession: SessionData)
     const sync: UiSyncState = {
       order: session.order,
       pinnedTabIds: session.pinnedTabIds,
+      pinnedUrls: session.pinnedUrls,
       folders: session.folders,
       splits: session.splits,
       activeTabId: session.activeTabId
@@ -359,6 +361,7 @@ export function setupBrowser(window: BrowserWindow, initialSession: SessionData)
     const sync: UiSyncState = {
       order: session.order,
       pinnedTabIds: session.pinnedTabIds,
+      pinnedUrls: session.pinnedUrls,
       folders: session.folders,
       splits: session.splits,
       activeTabId: session.activeTabId
@@ -526,6 +529,7 @@ export function setupBrowser(window: BrowserWindow, initialSession: SessionData)
   ipcMain.on(IPC.SESSION_SAVE_UI, (event, ui: UiPersistState) => {
     session.order = ui.order
     session.pinnedTabIds = ui.pinnedTabIds
+    session.pinnedUrls = ui.pinnedUrls
     session.folders = ui.folders
     session.splits = ui.splits
     session.activeTabId = ui.activeTabId
@@ -541,6 +545,7 @@ export function setupBrowser(window: BrowserWindow, initialSession: SessionData)
     const sync: UiSyncState = {
       order: session.order,
       pinnedTabIds: session.pinnedTabIds,
+      pinnedUrls: session.pinnedUrls,
       folders: session.folders,
       splits: session.splits,
       activeTabId: session.activeTabId
