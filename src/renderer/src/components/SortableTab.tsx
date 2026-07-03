@@ -1,6 +1,5 @@
 import { useSortable } from '@dnd-kit/sortable'
 import { useDroppable } from '@dnd-kit/core'
-import { CSS } from '@dnd-kit/utilities'
 import { Globe } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useTabsStore } from '@/store/tabsStore'
@@ -15,6 +14,9 @@ import type { DropZone } from './SidebarTabs'
  * En plus du tri, chaque onglet expose une zone droppable CENTRALE (`split:<id>`) : pendant un drag,
  * survoler le centre d'un autre onglet déclenche un aperçu de vue divisée (`previewOtherId`), et le
  * drop crée le split. Survoler les bords (haut/bas) reste du réordonnancement classique.
+ *
+ * Façon Arc : pendant le drag, les onglets NE bougent PAS (aucune transform appliquée) — une ligne
+ * d'insertion (gérée par `SidebarTabs`) indique la future position ; le tri est commité au drop.
  */
 export function SortableTab({
   id,
@@ -29,23 +31,19 @@ export function SortableTab({
   /** Si défini, CET onglet est la cible d'un aperçu de split avec cet autre onglet (le déposé). */
   previewOtherId?: string | null
 }): React.JSX.Element {
-  const { setNodeRef, attributes, listeners, transform, transition, isDragging } = useSortable({
-    id,
-    data: { zone }
-  })
+  const { setNodeRef, attributes, listeners, isDragging } = useSortable({ id, data: { zone } })
   const { setNodeRef: setSplitRef } = useDroppable({ id: `split:${id}`, data: { zone } })
-  const style = { transform: CSS.Translate.toString(transform), transition }
 
   if (previewOtherId) {
     return (
-      <div ref={setNodeRef} style={style}>
+      <div ref={setNodeRef}>
         <SplitPreviewPill firstId={id} secondId={previewOtherId} />
       </div>
     )
   }
 
   return (
-    <div ref={setNodeRef} style={style} className="relative">
+    <div ref={setNodeRef} className="relative">
       <TabItem
         id={id}
         drag={{ setNodeRef: () => {}, attributes, listeners, style: {}, isDragging }}

@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { Fragment, useState } from 'react'
 import { Plus, Trash2 } from 'lucide-react'
 import {
   DndContext,
@@ -14,7 +14,7 @@ import {
   type DragOverEvent,
   type DragStartEvent
 } from '@dnd-kit/core'
-import { SortableContext, arrayMove, verticalListSortingStrategy } from '@dnd-kit/sortable'
+import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { useTabsStore } from '@/store/tabsStore'
 import { TabItem } from './TabItem'
@@ -25,9 +25,15 @@ import { SplitItem } from './SplitItem'
 /** Les deux zones triables de la sidebar. Sert aussi d'id de conteneur droppable (dépôt à vide). */
 export type DropZone = 'fav' | 'cur'
 
-type Lists = { fav: string[]; cur: string[] }
+/** Position de la ligne d'insertion pendant un drag (façon Arc) : zone + index d'insertion. */
+type Indicator = { zone: DropZone; index: number }
 
 const SPLIT_PREFIX = 'split:'
+
+/** Fine ligne blanche d'insertion (indique la future position de l'onglet, sans reflow). */
+function DropLine(): React.JSX.Element {
+  return <div className="mx-1 my-0.5 h-0.5 shrink-0 rounded-full bg-white/80" />
+}
 
 /**
  * Détection de collision : priorité aux zones centrales de split (`split:<id>`) via `pointerWithin`
@@ -43,14 +49,6 @@ const collisionDetection: CollisionDetection = (args) => {
       (c) => !String(c.id).startsWith(SPLIT_PREFIX)
     )
   })
-}
-
-/** Résout le conteneur d'un id (item ou id de zone). */
-function containerOf(lists: Lists, id: string): DropZone | null {
-  if (id === 'fav' || id === 'cur') return id
-  if (lists.fav.includes(id)) return 'fav'
-  if (lists.cur.includes(id)) return 'cur'
-  return null
 }
 
 /** Zone de dépôt d'une liste (permet le drop dans une zone vide / dans les marges). */
@@ -111,87 +109,95 @@ export function SidebarTabs(): React.JSX.Element {
   const [dragging, setDragging] = useState<string | null>(null)
   // Onglet cible d'un aperçu de split (survol du centre d'un autre onglet), ou null.
   const [splitTarget, setSplitTarget] = useState<string | null>(null)
-  const [lists, setLists] = useState<Lists | null>(null)
-  const listsRef = useRef<Lists | null>(null)
-  const setBoth = (next: Lists | null): void => {
-    listsRef.current = next
-    setLists(next)
-  }
-
-  const fav = lists?.fav ?? favBase
-  const cur = lists?.cur ?? curBase
+  // Ligne d'insertion (réordonnancement) : les onglets ne bougent pas, seul ce trait se déplace.
+  const [indicator, setIndicator] = useState<Indicator | null>(null)
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
 
+  /** Zone (`fav`/`cur`) d'un id (onglet ou id de zone), ou null. */
+  const zoneOfId = (id: string): DropZone | null => {
+    if (id === 'fav' || id === 'cur') return id
+    if (favBase.includes(id)) return 'fav'
+    if (curBase.includes(id)) return 'cur'
+    return null
+  }
+
+  const resetDrag = (): void => {
+    setSplitTarget(null)
+    setIndicator(null)
+    setDragging(null)
+    document.body.removeAttribute('data-dnd-dragging')
+  }
+
   const onDragStart = (e: DragStartEvent): void => {
     setDragging(e.active.id as string)
-    setBoth({ fav: favBase, cur: curBase })
     // Marque un drag en cours : dans la fenêtre-overlay, ça empêche le hit-test de repasser en
-    // click-through (et de fermer le peek) quand le curseur survole le DragOverlay. Sans effet
-    // dans la fenêtre principale.
+    // click-through (et de fermer le peek) quand le curseur survole le DragOverlay.
     document.body.setAttribute('data-dnd-dragging', '')
   }
 
   const onDragOver = (e: DragOverEvent): void => {
     const activeId = e.active.id as string
     const overId = e.over?.id as string | undefined
-    // Survol du centre d'un autre onglet → aperçu de split (pas de réordonnancement).
+    // Survol du centre d'un autre onglet → aperçu de split (pas de ligne d'insertion).
     if (overId?.startsWith(SPLIT_PREFIX)) {
       const targetId = overId.slice(SPLIT_PREFIX.length)
-      setSplitTarget(targetId !== activeId ? targetId : null)
+      setSplitTarget(targetId === activeId ? null : targetId)
+      setIndicator(null)
       return
     }
-    if (splitTarget) setSplitTarget(null)
-    const prev = listsRef.current
-    if (!overId || !prev) return
-    const from = containerOf(prev, activeId)
-    const to = containerOf(prev, overId)
-    if (!from || !to || from === to) return
-
-    const source = [...prev[from]]
-    const dest = [...prev[to]]
-    const ai = source.indexOf(activeId)
-    if (ai < 0) return
-    source.splice(ai, 1)
-    let di = overId === to ? dest.length : dest.indexOf(overId)
-    if (di < 0) di = dest.length
-    dest.splice(di, 0, activeId)
-    const next: Lists = { ...prev }
-    next[from] = source
-    next[to] = dest
-    setBoth(next)
+    setSplitTarget(null)
+    const zone = overId ? zoneOfId(overId) : null
+    if (!overId || !zone) {
+      setIndicator(null)
+      return
+    }
+    // Dépôt dans une zone vide / ses marges (overId = 'fav'/'cur') → ligne en fin de liste.
+    if (overId === 'fav' || overId === 'cur') {
+      setIndicator({ zone, index: (zone === 'fav' ? favBase : curBase).length })
+      return
+    }
+    // Au-dessus/en dessous du centre d'un onglet : ligne avant/après lui.
+    const list = zone === 'fav' ? favBase : curBase
+    const pos = list.indexOf(overId)
+    const activeRect = e.active.rect.current.translated
+    const overRect = e.over?.rect
+    const after =
+      activeRect && overRect
+        ? activeRect.top + activeRect.height / 2 > overRect.top + overRect.height / 2
+        : false
+    setIndicator({ zone, index: pos + (after ? 1 : 0) })
   }
 
   const onDragEnd = (e: DragEndEvent): void => {
     const activeId = e.active.id as string
     const overId = e.over?.id as string | undefined
     // Drop sur le centre d'un onglet → crée une vue divisée des deux onglets (cible à gauche, déposé
-    // à droite). Pas de réordonnancement.
+    // à droite).
     if (overId?.startsWith(SPLIT_PREFIX)) {
       const targetId = overId.slice(SPLIT_PREFIX.length)
       if (targetId !== activeId) {
         window.prism.createSplitFromTabs({ firstId: targetId, secondId: activeId })
       }
-      setSplitTarget(null)
-      setBoth(null)
-      setDragging(null)
-      document.body.removeAttribute('data-dnd-dragging')
+      resetDrag()
       return
     }
-    setSplitTarget(null)
-    const prev = listsRef.current
-    if (prev && overId) {
-      const zone = prev.fav.includes(activeId) ? 'fav' : 'cur'
-      const items = prev[zone]
-      const oldI = items.indexOf(activeId)
-      let newI = overId === zone ? items.length - 1 : items.indexOf(overId)
-      if (newI < 0) newI = items.length - 1
-      const finalItems = oldI >= 0 && newI >= 0 ? arrayMove(items, oldI, newI) : items
-      commitLists(zone === 'fav' ? finalItems : prev.fav, zone === 'cur' ? finalItems : prev.cur)
+    // Réordonnancement : insère l'onglet à la position de la ligne.
+    if (indicator) {
+      const fav = favBase.filter((x) => x !== activeId)
+      const cur = curBase.filter((x) => x !== activeId)
+      const srcZone = favBase.includes(activeId) ? 'fav' : curBase.includes(activeId) ? 'cur' : null
+      let idx = indicator.index
+      // Retirer l'actif de la même zone décale les positions suivantes de -1.
+      if (srcZone === indicator.zone) {
+        const srcPos = (srcZone === 'fav' ? favBase : curBase).indexOf(activeId)
+        if (srcPos >= 0 && srcPos < idx) idx--
+      }
+      const dest = indicator.zone === 'fav' ? fav : cur
+      dest.splice(Math.max(0, Math.min(idx, dest.length)), 0, activeId)
+      commitLists(fav, cur)
     }
-    setBoth(null)
-    setDragging(null)
-    document.body.removeAttribute('data-dnd-dragging')
+    resetDrag()
   }
 
   const clearCurrent = (): void => {
@@ -215,12 +221,7 @@ export function SidebarTabs(): React.JSX.Element {
       onDragStart={onDragStart}
       onDragOver={onDragOver}
       onDragEnd={onDragEnd}
-      onDragCancel={() => {
-        setSplitTarget(null)
-        setBoth(null)
-        setDragging(null)
-        document.body.removeAttribute('data-dnd-dragging')
-      }}
+      onDragCancel={resetDrag}
     >
       <div className="flex min-h-0 flex-1 flex-col">
         {/* Zone favoris : dossiers + onglets épinglés */}
@@ -229,18 +230,21 @@ export function SidebarTabs(): React.JSX.Element {
             {folders.map((f) => (
               <Folder key={f.id} folder={f} childIds={childrenByFolder.get(f.id) ?? []} />
             ))}
-            <SortableContext items={fav} strategy={verticalListSortingStrategy}>
-              {fav.map((id) => (
-                <SortableTab
-                  key={id}
-                  id={id}
-                  zone="fav"
-                  dragActive={dragging !== null}
-                  previewOtherId={splitTarget === id ? dragging : null}
-                />
+            <SortableContext items={favBase} strategy={verticalListSortingStrategy}>
+              {favBase.map((id, i) => (
+                <Fragment key={id}>
+                  {indicator?.zone === 'fav' && indicator.index === i && <DropLine />}
+                  <SortableTab
+                    id={id}
+                    zone="fav"
+                    dragActive={dragging !== null}
+                    previewOtherId={splitTarget === id ? dragging : null}
+                  />
+                </Fragment>
               ))}
+              {indicator?.zone === 'fav' && indicator.index === favBase.length && <DropLine />}
             </SortableContext>
-            {fav.length === 0 && folders.length === 0 && (
+            {favBase.length === 0 && folders.length === 0 && (
               <p className="px-2 py-3 text-center text-xs text-slate-500">
                 Glissez un onglet ici pour l&apos;épingler
               </p>
@@ -275,16 +279,19 @@ export function SidebarTabs(): React.JSX.Element {
             {splits.map((s) => (
               <SplitItem key={s.id} split={s} />
             ))}
-            <SortableContext items={cur} strategy={verticalListSortingStrategy}>
-              {cur.map((id) => (
-                <SortableTab
-                  key={id}
-                  id={id}
-                  zone="cur"
-                  dragActive={dragging !== null}
-                  previewOtherId={splitTarget === id ? dragging : null}
-                />
+            <SortableContext items={curBase} strategy={verticalListSortingStrategy}>
+              {curBase.map((id, i) => (
+                <Fragment key={id}>
+                  {indicator?.zone === 'cur' && indicator.index === i && <DropLine />}
+                  <SortableTab
+                    id={id}
+                    zone="cur"
+                    dragActive={dragging !== null}
+                    previewOtherId={splitTarget === id ? dragging : null}
+                  />
+                </Fragment>
               ))}
+              {indicator?.zone === 'cur' && indicator.index === curBase.length && <DropLine />}
             </SortableContext>
           </ZoneArea>
         </ScrollArea>
