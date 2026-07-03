@@ -304,7 +304,7 @@ export function SidebarTabs(): React.JSX.Element {
     })
   }
 
-  const renderVisualItem = (id: string, zone: DropZone, index: number, isFav: boolean) => {
+  const renderVisualItem = (id: string, zone: DropZone, index: number) => {
     const isSplit = id.startsWith('split-')
     const splitState = isSplit ? splits.find(s => s.id === id.slice(6)) : null
 
@@ -336,13 +336,13 @@ export function SidebarTabs(): React.JSX.Element {
     >
       <div className="flex min-h-0 flex-1 flex-col">
         {/* Zone favoris : dossiers + onglets épinglés */}
-        <ScrollArea className="min-h-0 flex-1 px-2">
+        <ScrollArea type="auto" className="min-h-0 flex-1 px-2">
           <ZoneArea zone="fav" className="flex flex-col gap-0.5 pt-1 pb-2">
             {folders.map((f) => (
               <Folder key={f.id} folder={f} childIds={childrenByFolder.get(f.id) ?? []} />
             ))}
             <SortableContext items={visualFavBase} strategy={verticalListSortingStrategy}>
-              {visualFavBase.map((id, i) => renderVisualItem(id, 'fav', i, true))}
+              {visualFavBase.map((id, i) => renderVisualItem(id, 'fav', i))}
               {indicator?.zone === 'fav' && indicator.index === visualFavBase.length && <DropLine />}
             </SortableContext>
             {visualFavBase.length === 0 && folders.length === 0 && (
@@ -367,7 +367,7 @@ export function SidebarTabs(): React.JSX.Element {
         </div>
 
         {/* Zone onglets actuels */}
-        <ScrollArea className="min-h-0 flex-1 px-2">
+        <ScrollArea type="auto" className="min-h-0 flex-1 px-2">
           <ZoneArea zone="cur" className="flex flex-col gap-0.5 pb-2">
             <button
               onClick={newTab}
@@ -377,7 +377,7 @@ export function SidebarTabs(): React.JSX.Element {
               <span>Nouvel onglet</span>
             </button>
             <SortableContext items={visualCurBase} strategy={verticalListSortingStrategy}>
-              {visualCurBase.map((id, i) => renderVisualItem(id, 'cur', i, false))}
+              {visualCurBase.map((id, i) => renderVisualItem(id, 'cur', i))}
               {indicator?.zone === 'cur' && indicator.index === visualCurBase.length && <DropLine />}
             </SortableContext>
           </ZoneArea>

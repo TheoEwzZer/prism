@@ -1,4 +1,5 @@
 import { SidebarTabs } from '@/components/SidebarTabs'
+import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { cn } from '@/lib/utils'
 import type { SidebarToggleMaskState } from '@shared/types'
 
@@ -30,7 +31,9 @@ export function SidebarToggleMask({
         style={{ width: state.width }}
         className="flex h-full min-w-0 flex-col pt-1 text-sidebar-foreground"
       >
-        <SidebarTabs />
+        <ErrorBoundary>
+          <SidebarTabs />
+        </ErrorBoundary>
       </div>
     </aside>
   )

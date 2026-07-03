@@ -1,4 +1,5 @@
 import { SidebarTabs } from '@/components/SidebarTabs'
+import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { cn } from '@/lib/utils'
 
 /**
@@ -20,7 +21,9 @@ export function PeekSidebar({ open, width }: { open: boolean; width: number }): 
         open ? 'translate-x-0' : '-translate-x-full'
       )}
     >
-      <SidebarTabs />
+      <ErrorBoundary>
+        <SidebarTabs />
+      </ErrorBoundary>
     </aside>
   )
 }

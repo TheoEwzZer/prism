@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useTabsStore } from '@/store/tabsStore'
 import { SidebarTabs } from './SidebarTabs'
+import { ErrorBoundary } from './ErrorBoundary'
+
 
 /**
  * Barre latérale gauche (style Arc). La navigation (paramètres, toggle, back/forward/reload,
@@ -34,7 +36,9 @@ export function Sidebar(): React.JSX.Element {
       className="h-full shrink-0 overflow-hidden bg-sidebar"
     >
       <div style={{ width }} className="flex h-full min-w-0 flex-col pt-1 text-sidebar-foreground">
-        <SidebarTabs />
+        <ErrorBoundary>
+          <SidebarTabs />
+        </ErrorBoundary>
       </div>
     </aside>
   )
