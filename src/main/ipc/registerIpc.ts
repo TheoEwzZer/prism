@@ -18,7 +18,9 @@ import {
   type SplitCreateInput,
   type SplitCreatedPayload,
   type SplitState,
-  type SplitOrientation
+  type SplitOrientation,
+  type SplitPaneMenuPayload,
+  type SplitDetachPayload
 } from '@shared/types'
 import { TabManager } from '../tabs/TabManager'
 import { OverlayLayer } from '../overlay/OverlayLayer'
@@ -320,6 +322,63 @@ export function setupBrowser(window: BrowserWindow, initialSession: SessionData)
     overlay.toggleCommand({ mode: 'split', activeId: newId })
     persist()
   })
+
+  // Diffuse l'état organisationnel (dont `splits` + `activeTabId`) aux DEUX fenêtres via applyRemoteUi
+  // (anti-écho) : convergent sans re-persister. Utilisé par les mutations de division ci-dessous
+  // (pas de nouvel onglet créé → pas besoin de l'event atomique SPLIT_CREATED).
+  const broadcastUiSync = (): void => {
+    const sync: UiSyncState = {
+      order: session.order,
+      pinnedTabIds: session.pinnedTabIds,
+      folders: session.folders,
+      splits: session.splits,
+      activeTabId: session.activeTabId
+    }
+    broadcast(IPC.UI_STATE_SYNC, sync)
+  }
+
+  /** Focus par défaut d'une division : l'onglet actif s'il en fait partie, sinon le 1er panneau. */
+  const splitFocus = (tabIds: [string, string]): string =>
+    session.activeTabId && tabIds.includes(session.activeTabId) ? session.activeTabId : tabIds[0]
+
+  // Échange les deux panneaux d'une division (gauche<->droite ou haut<->bas).
+  ipcMain.on(IPC.SPLIT_MOVE, (_e, splitId: string) => {
+    const s = session.splits.find((x) => x.id === splitId)
+    if (!s) return
+    const tabIds: [string, string] = [s.tabIds[1], s.tabIds[0]]
+    session.splits = session.splits.map((x) => (x.id === splitId ? { ...x, tabIds } : x))
+    const focusedId = splitFocus(tabIds)
+    tabManager.activateSplit({ orientation: s.orientation, tabIds, focusedId })
+    session.activeTabId = focusedId
+    broadcastUiSync()
+    persist()
+  })
+
+  // Bascule l'orientation d'une division (côte à côte <-> empilé).
+  ipcMain.on(IPC.SPLIT_CONVERT, (_e, splitId: string) => {
+    const s = session.splits.find((x) => x.id === splitId)
+    if (!s) return
+    const orientation: SplitOrientation = s.orientation === 'horizontal' ? 'vertical' : 'horizontal'
+    session.splits = session.splits.map((x) => (x.id === splitId ? { ...x, orientation } : x))
+    const focusedId = splitFocus(s.tabIds)
+    tabManager.activateSplit({ orientation, tabIds: s.tabIds, focusedId })
+    session.activeTabId = focusedId
+    broadcastUiSync()
+    persist()
+  })
+
+  // « Séparer de la vue » : dissout la division SANS fermer d'onglet (les deux redeviennent des
+  // onglets normaux). `keepId` repasse en plein écran ; l'autre reste dans la liste des onglets.
+  ipcMain.on(IPC.SPLIT_DETACH, (_e, payload: SplitDetachPayload) => {
+    const s = session.splits.find((x) => x.id === payload.splitId)
+    if (!s) return
+    session.splits = session.splits.filter((x) => x.id !== payload.splitId)
+    session.activeTabId = payload.keepId
+    tabManager.activateTab(payload.keepId)
+    broadcastUiSync()
+    persist()
+  })
+
   ipcMain.on(IPC.TAB_NAVIGATE, (_e, payload: { id: string; input: string }) => {
     tabManager.navigate(payload.id, payload.input)
   })
@@ -398,6 +457,10 @@ export function setupBrowser(window: BrowserWindow, initialSession: SessionData)
     overlay.toggleSplitMenu(payload)
   )
   ipcMain.on(IPC.OVERLAY_SPLIT_MENU_CLOSE, () => overlay.hideSplitMenu())
+  ipcMain.on(IPC.OVERLAY_PANE_MENU, (_e, payload: SplitPaneMenuPayload) =>
+    overlay.togglePaneMenu(payload)
+  )
+  ipcMain.on(IPC.OVERLAY_PANE_MENU_CLOSE, () => overlay.hidePaneMenu())
   ipcMain.on(IPC.OVERLAY_COMMAND, (_e, payload: CommandPalettePayload) =>
     overlay.toggleCommand(payload)
   )
@@ -498,6 +561,9 @@ export function setupBrowser(window: BrowserWindow, initialSession: SessionData)
     ipcMain.removeAllListeners(IPC.TAB_HIBERNATE)
     ipcMain.removeAllListeners(IPC.SPLIT_ACTIVATE)
     ipcMain.removeAllListeners(IPC.SPLIT_CREATE)
+    ipcMain.removeAllListeners(IPC.SPLIT_MOVE)
+    ipcMain.removeAllListeners(IPC.SPLIT_CONVERT)
+    ipcMain.removeAllListeners(IPC.SPLIT_DETACH)
     ipcMain.removeAllListeners(IPC.TAB_RENAME)
     ipcMain.removeAllListeners(IPC.VIEW_SET_SIDEBAR)
     ipcMain.removeAllListeners(IPC.OPEN_EXTERNAL)
@@ -508,6 +574,8 @@ export function setupBrowser(window: BrowserWindow, initialSession: SessionData)
     ipcMain.removeAllListeners(IPC.OVERLAY_TAB_MENU_CLOSE)
     ipcMain.removeAllListeners(IPC.OVERLAY_SPLIT_MENU)
     ipcMain.removeAllListeners(IPC.OVERLAY_SPLIT_MENU_CLOSE)
+    ipcMain.removeAllListeners(IPC.OVERLAY_PANE_MENU)
+    ipcMain.removeAllListeners(IPC.OVERLAY_PANE_MENU_CLOSE)
     ipcMain.removeAllListeners(IPC.OVERLAY_COMMAND)
     ipcMain.removeAllListeners(IPC.OVERLAY_COMMAND_CLOSE)
     ipcMain.removeAllListeners(IPC.OVERLAY_SET_IGNORE)

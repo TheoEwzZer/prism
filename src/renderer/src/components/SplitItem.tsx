@@ -28,7 +28,7 @@ export const SplitItem = memo(function SplitItem({
       )}
     >
       <SplitHalf paneId={a} split={split} />
-      <div className={cn("my-1 w-px shrink-0", isActive ? "bg-white/5" : "bg-white/10")} />
+      <div className={cn('my-1 w-px shrink-0', isActive ? 'bg-white/5' : 'bg-white/10')} />
       <SplitHalf paneId={b} split={split} />
     </div>
   )
@@ -45,7 +45,9 @@ function SplitHalf({
   const customTitle = useTabsStore((s) => s.tabs[paneId]?.customTitle)
   const favicon = useTabsStore((s) => s.tabs[paneId]?.favicon)
   const isLoading = useTabsStore((s) => s.tabs[paneId]?.isLoading)
-  const isActive = useTabsStore((s) => s.activeTabId ? split.tabIds.includes(s.activeTabId) : false)
+  const isActive = useTabsStore((s) =>
+    s.activeTabId ? split.tabIds.includes(s.activeTabId) : false
+  )
 
   if (title === undefined) return null
   const displayName = customTitle || title || 'Nouvel onglet'

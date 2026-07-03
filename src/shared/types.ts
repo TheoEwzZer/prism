@@ -172,6 +172,24 @@ export interface SplitMenuPayload {
   activeId: string | null
 }
 
+/**
+ * Menu d'options d'UN panneau d'une vue divisée (bouton dans sa barre d'outils), rendu dans la
+ * couche d'overlay. Permet de déplacer ce panneau, le séparer de la vue, ou convertir l'orientation.
+ */
+export interface SplitPaneMenuPayload {
+  x: number
+  y: number
+  splitId: string
+  paneId: string
+}
+
+/** « Séparer de la vue » : dissout la division mais garde les onglets (celui-ci devient actif). */
+export interface SplitDetachPayload {
+  splitId: string
+  /** Panneau conservé actif en plein écran. L'autre reste un onglet normal. */
+  keepId: string
+}
+
 /** État de session persisté sur disque et restauré au démarrage. */
 export interface SessionData {
   tabs: TabState[]
@@ -264,6 +282,9 @@ export const IPC = {
   TAB_HIBERNATE: 'tab:hibernate', // send : hiberne manuellement un onglet (menu contextuel)
   SPLIT_CREATE: 'split:create', // send : crée une vue divisée (orchestré par le Main)
   SPLIT_ACTIVATE: 'split:activate', // send : affiche une vue divisée (2 vues natives simultanées)
+  SPLIT_MOVE: 'split:move', // send : échange les deux panneaux d'une division
+  SPLIT_CONVERT: 'split:convert', // send : bascule l'orientation d'une division (H <-> V)
+  SPLIT_DETACH: 'split:detach', // send : dissout la division en gardant les onglets
   TAB_RENAME: 'tab:rename', // send : renomme un onglet (customTitle) via le menu contextuel
   TAB_RENAME_STATE: 'tab:renameState', // window <-> Main : onglet en édition inline (id | null), diffusé
   VIEW_SET_SIDEBAR: 'view:setSidebar',
@@ -286,6 +307,8 @@ export const IPC = {
   OVERLAY_TAB_MENU_CLOSE: 'overlay:tabMenuClose', // overlay -> Main : fermer le menu contextuel
   OVERLAY_SPLIT_MENU: 'overlay:splitMenu', // main -> Main : ouvrir le menu « Options de vue divisée »
   OVERLAY_SPLIT_MENU_CLOSE: 'overlay:splitMenuClose', // overlay -> Main : fermer le menu split
+  OVERLAY_PANE_MENU: 'overlay:paneMenu', // main -> Main : ouvrir le menu d'options d'un panneau
+  OVERLAY_PANE_MENU_CLOSE: 'overlay:paneMenuClose', // overlay -> Main : fermer le menu de panneau
   SIDEBAR_PEEK_OPEN: 'sidebar:peekOpen', // main -> Main : survol du bord gauche
   SIDEBAR_PEEK_CLOSE: 'sidebar:peekClose', // overlay -> Main : souris sortie du panneau
   SIDEBAR_SET_WIDTH: 'sidebar:setWidth', // overlay -> Main : drag de la poignée de resize (px)
@@ -298,6 +321,7 @@ export const IPC = {
   OVERLAY_SITE_CONTROL_DATA: 'overlay:siteControlData', // Main -> overlay : push données (ou null)
   OVERLAY_TAB_MENU_DATA: 'overlay:tabMenuData', // Main -> overlay : ouvrir/fermer le menu (ou null)
   OVERLAY_SPLIT_MENU_DATA: 'overlay:splitMenuData', // Main -> overlay : ouvrir/fermer le menu split
+  OVERLAY_PANE_MENU_DATA: 'overlay:paneMenuData', // Main -> overlay : ouvrir/fermer le menu de panneau
   OVERLAY_COMMAND_DATA: 'overlay:commandData', // Main -> overlay : ouvrir/fermer la palette (ou null)
   HISTORY_OPEN: 'history:open', // Main -> Renderer : ouvrir/focus l'onglet prism://history/ (Ctrl+H)
   SIDEBAR_PEEK_STATE: 'sidebar:peekState', // Main -> overlay : ouverture/fermeture animée

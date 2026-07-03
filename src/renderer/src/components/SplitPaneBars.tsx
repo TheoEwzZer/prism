@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowLeft, ArrowRight, RotateCw, Globe, X } from 'lucide-react'
+import { ArrowLeft, ArrowRight, RotateCw, Globe, X, Columns2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useTabsStore } from '@/store/tabsStore'
 import { splitPaneLayout, type SplitState, type LayoutRect } from '@shared/types'
@@ -95,6 +95,18 @@ function PaneToolbar({
     if (remaining) window.prism.activateTab(remaining)
   }
 
+  // Ouvre le menu « Options de vue divisée » de CE panneau dans l'overlay (au-dessus de la vue).
+  const openMenu = (e: React.MouseEvent<HTMLButtonElement>): void => {
+    e.stopPropagation()
+    const r = e.currentTarget.getBoundingClientRect()
+    window.prism.openPaneMenu({
+      x: Math.round(r.left),
+      y: Math.round(r.bottom + 4),
+      splitId: split.id,
+      paneId
+    })
+  }
+
   const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>): void => {
     e.stopPropagation()
     if (e.key === 'Enter') submit()
@@ -157,6 +169,19 @@ function PaneToolbar({
           'text-slate-200 placeholder:text-slate-500 focus:border-white/15 focus:bg-white/10'
         )}
       />
+
+      <button
+        aria-label="Options de vue divisée"
+        title="Options de vue divisée"
+        onClick={openMenu}
+        onMouseDown={(e) => e.stopPropagation()}
+        className={cn(
+          'flex size-6 shrink-0 items-center justify-center rounded-md text-slate-400 transition-colors',
+          'hover:bg-white/10 hover:text-white'
+        )}
+      >
+        <Columns2 className="size-3.5" />
+      </button>
 
       <button
         aria-label="Fermer le panneau"

@@ -22,7 +22,9 @@ import {
   type SplitActivatePayload,
   type SplitMenuPayload,
   type SplitCreateInput,
-  type SplitCreatedPayload
+  type SplitCreatedPayload,
+  type SplitPaneMenuPayload,
+  type SplitDetachPayload
 } from '@shared/types'
 
 /** Abonnement typé à un event Main -> Renderer ; retourne une fonction de désabonnement. */
@@ -51,6 +53,9 @@ const prism = {
   createSplit: (input: SplitCreateInput): void => ipcRenderer.send(IPC.SPLIT_CREATE, input),
   activateSplit: (payload: SplitActivatePayload): void =>
     ipcRenderer.send(IPC.SPLIT_ACTIVATE, payload),
+  moveSplit: (splitId: string): void => ipcRenderer.send(IPC.SPLIT_MOVE, splitId),
+  convertSplit: (splitId: string): void => ipcRenderer.send(IPC.SPLIT_CONVERT, splitId),
+  detachSplit: (payload: SplitDetachPayload): void => ipcRenderer.send(IPC.SPLIT_DETACH, payload),
   renameTab: (id: string, title: string | null): void =>
     ipcRenderer.send(IPC.TAB_RENAME, { id, title }),
   // Démarre/arrête l'édition inline d'un onglet (id ou null) ; le Main diffuse aux deux fenêtres.
@@ -88,12 +93,15 @@ const prism = {
   openTabMenu: (payload: TabMenuPayload): void => ipcRenderer.send(IPC.OVERLAY_TAB_MENU, payload),
   openSplitMenu: (payload: SplitMenuPayload): void =>
     ipcRenderer.send(IPC.OVERLAY_SPLIT_MENU, payload),
+  openPaneMenu: (payload: SplitPaneMenuPayload): void =>
+    ipcRenderer.send(IPC.OVERLAY_PANE_MENU, payload),
   openCommandPalette: (payload: CommandPalettePayload): void =>
     ipcRenderer.send(IPC.OVERLAY_COMMAND, payload),
   // Depuis la couche d'overlay elle-même :
   closeSiteControl: (): void => ipcRenderer.send(IPC.OVERLAY_CLOSE),
   closeCommandPalette: (): void => ipcRenderer.send(IPC.OVERLAY_COMMAND_CLOSE),
   closeSplitMenu: (): void => ipcRenderer.send(IPC.OVERLAY_SPLIT_MENU_CLOSE),
+  closePaneMenu: (): void => ipcRenderer.send(IPC.OVERLAY_PANE_MENU_CLOSE),
   closeSidebarPeek: (): void => ipcRenderer.send(IPC.SIDEBAR_PEEK_CLOSE),
   closeTabMenu: (): void => ipcRenderer.send(IPC.OVERLAY_TAB_MENU_CLOSE),
   setOverlayIgnoreMouse: (ignore: boolean): void =>
@@ -104,6 +112,8 @@ const prism = {
     subscribe(IPC.OVERLAY_TAB_MENU_DATA, cb),
   onSplitMenuData: (cb: (payload: SplitMenuPayload | null) => void): (() => void) =>
     subscribe(IPC.OVERLAY_SPLIT_MENU_DATA, cb),
+  onPaneMenuData: (cb: (payload: SplitPaneMenuPayload | null) => void): (() => void) =>
+    subscribe(IPC.OVERLAY_PANE_MENU_DATA, cb),
   onCommandData: (cb: (payload: CommandPalettePayload | null) => void): (() => void) =>
     subscribe(IPC.OVERLAY_COMMAND_DATA, cb),
   onSidebarPeekState: (cb: (state: SidebarPeekState) => void): (() => void) =>

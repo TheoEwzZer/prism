@@ -9,7 +9,8 @@ import type {
   SidebarLayoutState,
   CommandPalettePayload,
   TabMenuPayload,
-  SplitMenuPayload
+  SplitMenuPayload,
+  SplitPaneMenuPayload
 } from '@shared/types'
 import { SIDEBAR_DEFAULT_WIDTH } from '@shared/types'
 import { PeekSidebar } from './PeekSidebar'
@@ -18,6 +19,7 @@ import { SidebarResizeHandle } from './SidebarResizeHandle'
 import { SiteControlPopover } from './SiteControlPopover'
 import { TabContextMenu } from './TabContextMenu'
 import { SplitMenu } from './SplitMenu'
+import { PaneOptionsMenu } from './PaneOptionsMenu'
 import { CommandPalette } from './CommandPalette'
 
 const PEEK_ARM_MS = 150
@@ -51,6 +53,7 @@ export function OverlayLayer(): React.JSX.Element {
   const [site, setSite] = useState<SiteControlPayload | null>(null)
   const [tabMenu, setTabMenu] = useState<TabMenuPayload | null>(null)
   const [splitMenu, setSplitMenu] = useState<SplitMenuPayload | null>(null)
+  const [paneMenu, setPaneMenu] = useState<SplitPaneMenuPayload | null>(null)
   const [command, setCommand] = useState<CommandPalettePayload | null>(null)
   // Édition inline d'un onglet en cours (dans le peek) : « épingle » le peek (cf. hit-test).
   const renaming = useTabsStore((s) => s.renamingTabId !== null)
@@ -73,6 +76,7 @@ export function OverlayLayer(): React.JSX.Element {
   useEffect(() => window.prism.onSiteControlData(setSite), [])
   useEffect(() => window.prism.onTabMenuData(setTabMenu), [])
   useEffect(() => window.prism.onSplitMenuData(setSplitMenu), [])
+  useEffect(() => window.prism.onPaneMenuData(setPaneMenu), [])
   useEffect(() => window.prism.onCommandData(setCommand), [])
 
   // --- Click-through : hit-test global ---
@@ -158,6 +162,7 @@ export function OverlayLayer(): React.JSX.Element {
     site !== null ||
     tabMenu !== null ||
     splitMenu !== null ||
+    paneMenu !== null ||
     command !== null ||
     resizeActive
   useEffect(() => {
@@ -258,6 +263,27 @@ export function OverlayLayer(): React.JSX.Element {
     }
   }, [splitMenu])
 
+  // Menu d'options de panneau : fermeture au clic extérieur (blur) / Échap / clic ailleurs.
+  useEffect(() => {
+    if (!paneMenu) return
+    const onBlur = (): void => window.prism.closePaneMenu()
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') window.prism.closePaneMenu()
+    }
+    const onDown = (e: PointerEvent): void => {
+      const el = e.target as HTMLElement | null
+      if (!el?.closest('[data-overlay-hit="panemenu"]')) window.prism.closePaneMenu()
+    }
+    window.addEventListener('blur', onBlur)
+    window.addEventListener('keydown', onKey)
+    window.addEventListener('pointerdown', onDown)
+    return () => {
+      window.removeEventListener('blur', onBlur)
+      window.removeEventListener('keydown', onKey)
+      window.removeEventListener('pointerdown', onDown)
+    }
+  }, [paneMenu])
+
   // Palette de commande : même logique (clic extérieur / Échap). Échap est géré ici plutôt que
   // par cmdk pour fermer la fenêtre-overlay (et pas seulement vider le champ).
   useEffect(() => {
@@ -305,6 +331,7 @@ export function OverlayLayer(): React.JSX.Element {
       {site && <SiteControlPopover data={site} />}
       {tabMenu && <TabContextMenu data={tabMenu} />}
       {splitMenu && <SplitMenu data={splitMenu} />}
+      {paneMenu && <PaneOptionsMenu data={paneMenu} />}
       {command && <CommandPalette data={command} />}
     </div>
   )

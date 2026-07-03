@@ -6,7 +6,8 @@ import {
   type SiteControlPayload,
   type CommandPalettePayload,
   type TabMenuPayload,
-  type SplitMenuPayload
+  type SplitMenuPayload,
+  type SplitPaneMenuPayload
 } from '@shared/types'
 
 /** Durée de l'animation de repli/dépli (doit rester synchro avec la transition CSS du masque). */
@@ -35,6 +36,7 @@ export class OverlayLayer {
   private siteControl: SiteControlPayload | null = null
   private tabMenu: TabMenuPayload | null = null
   private splitMenu: SplitMenuPayload | null = null
+  private paneMenu: SplitPaneMenuPayload | null = null
   private command: CommandPalettePayload | null = null
   private peekOpen = false
   // Largeur du peek mémorisée : conservée à la fermeture pour que le slide-out (`-translate-x-full`,
@@ -124,6 +126,26 @@ export class OverlayLayer {
     this.splitMenu = null
     this.lastHideAt = Date.now()
     this.send(IPC.OVERLAY_SPLIT_MENU_DATA, null)
+  }
+
+  /** Menu d'options d'un panneau (bouton dans sa barre d'outils). Toggle façon menu split. */
+  togglePaneMenu(payload: SplitPaneMenuPayload): void {
+    if (this.paneMenu !== null) {
+      this.hidePaneMenu()
+      return
+    }
+    if (Date.now() - this.lastHideAt < 250) return
+    this.paneMenu = payload
+    const win = this.ensureWindow()
+    win.focus()
+    this.send(IPC.OVERLAY_PANE_MENU_DATA, payload)
+  }
+
+  hidePaneMenu(): void {
+    if (this.paneMenu === null) return
+    this.paneMenu = null
+    this.lastHideAt = Date.now()
+    this.send(IPC.OVERLAY_PANE_MENU_DATA, null)
   }
 
   /**
@@ -295,6 +317,7 @@ export class OverlayLayer {
       this.send(IPC.OVERLAY_SITE_CONTROL_DATA, this.siteControl)
       this.send(IPC.OVERLAY_TAB_MENU_DATA, this.tabMenu)
       this.send(IPC.OVERLAY_SPLIT_MENU_DATA, this.splitMenu)
+      this.send(IPC.OVERLAY_PANE_MENU_DATA, this.paneMenu)
       this.send(IPC.OVERLAY_COMMAND_DATA, this.command)
       this.send(IPC.SIDEBAR_PEEK_STATE, { open: this.peekOpen, width: this.peekWidth })
     })

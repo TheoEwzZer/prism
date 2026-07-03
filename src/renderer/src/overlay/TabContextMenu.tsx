@@ -70,11 +70,7 @@ export function TabContextMenu({ data }: Readonly<{ data: TabMenuPayload }>): Re
         onClick={copyUrl}
       />
       <Row icon={<Pencil className="size-4" />} label="Renommer" onClick={rename} />
-      <Row
-        icon={<CopyPlus className="size-4" />}
-        label="Dupliquer"
-        onClick={duplicateTab}
-      />
+      <Row icon={<CopyPlus className="size-4" />} label="Dupliquer" onClick={duplicateTab} />
       <Row
         icon={<Columns2 className="size-4" />}
         label="Ajouter une vue divisée"
