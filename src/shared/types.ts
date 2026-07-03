@@ -56,6 +56,16 @@ export interface SplitCreateInput {
 }
 
 /**
+ * Crée une vue divisée à partir de DEUX onglets EXISTANTS (drag & drop d'un onglet sur un autre dans
+ * la sidebar). `firstId` = panneau gauche, `secondId` = panneau droit (l'onglet déposé). Pas de
+ * nouvel onglet ni de palette.
+ */
+export interface SplitFromTabsInput {
+  firstId: string
+  secondId: string
+}
+
+/**
  * Vue divisée créée, diffusée par le Main aux DEUX fenêtres en UN SEUL event atomique : le nouvel
  * onglet + la division + le focus sont appliqués ensemble (un seul `set`). Indispensable pour éviter
  * une course de persistance : si l'onglet était ajouté séparément (tab:created), la fenêtre
@@ -281,6 +291,7 @@ export const IPC = {
   TAB_RELOAD: 'tab:reload',
   TAB_HIBERNATE: 'tab:hibernate', // send : hiberne manuellement un onglet (menu contextuel)
   SPLIT_CREATE: 'split:create', // send : crée une vue divisée (orchestré par le Main)
+  SPLIT_CREATE_FROM_TABS: 'split:createFromTabs', // send : divise deux onglets existants (drag&drop)
   SPLIT_ACTIVATE: 'split:activate', // send : affiche une vue divisée (2 vues natives simultanées)
   SPLIT_MOVE: 'split:move', // send : échange les deux panneaux d'une division
   SPLIT_CONVERT: 'split:convert', // send : bascule l'orientation d'une division (H <-> V)

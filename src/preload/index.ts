@@ -23,6 +23,7 @@ import {
   type SplitMenuPayload,
   type SplitCreateInput,
   type SplitCreatedPayload,
+  type SplitFromTabsInput,
   type SplitPaneMenuPayload,
   type SplitDetachPayload
 } from '@shared/types'
@@ -51,6 +52,8 @@ const prism = {
   reload: (id: string): void => ipcRenderer.send(IPC.TAB_RELOAD, id),
   hibernateTab: (id: string): void => ipcRenderer.send(IPC.TAB_HIBERNATE, id),
   createSplit: (input: SplitCreateInput): void => ipcRenderer.send(IPC.SPLIT_CREATE, input),
+  createSplitFromTabs: (input: SplitFromTabsInput): void =>
+    ipcRenderer.send(IPC.SPLIT_CREATE_FROM_TABS, input),
   activateSplit: (payload: SplitActivatePayload): void =>
     ipcRenderer.send(IPC.SPLIT_ACTIVATE, payload),
   moveSplit: (splitId: string): void => ipcRenderer.send(IPC.SPLIT_MOVE, splitId),

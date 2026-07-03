@@ -17,6 +17,7 @@ import {
   type SplitMenuPayload,
   type SplitCreateInput,
   type SplitCreatedPayload,
+  type SplitFromTabsInput,
   type SplitState,
   type SplitOrientation,
   type SplitPaneMenuPayload,
@@ -323,6 +324,31 @@ export function setupBrowser(window: BrowserWindow, initialSession: SessionData)
     persist()
   })
 
+  // Divise DEUX onglets existants (drag & drop d'un onglet sur un autre dans la sidebar) : aucun
+  // nouvel onglet, aucune palette. `firstId` à gauche, `secondId` (déposé) à droite + focalisé.
+  ipcMain.on(IPC.SPLIT_CREATE_FROM_TABS, (_e, input: SplitFromTabsInput) => {
+    const { firstId, secondId } = input ?? {}
+    if (!firstId || !secondId || firstId === secondId) return
+    // Pas de division imbriquée : ignore si l'un des deux est déjà membre d'un split.
+    const busy = new Set(session.splits.flatMap((s) => s.tabIds))
+    if (busy.has(firstId) || busy.has(secondId)) return
+
+    const split: SplitState = {
+      id: randomUUID(),
+      orientation: 'horizontal',
+      tabIds: [firstId, secondId]
+    }
+    session.splits = [...session.splits, split]
+    tabManager.activateSplit({
+      orientation: 'horizontal',
+      tabIds: [firstId, secondId],
+      focusedId: secondId
+    })
+    session.activeTabId = secondId
+    broadcastUiSync()
+    persist()
+  })
+
   // Diffuse l'état organisationnel (dont `splits` + `activeTabId`) aux DEUX fenêtres via applyRemoteUi
   // (anti-écho) : convergent sans re-persister. Utilisé par les mutations de division ci-dessous
   // (pas de nouvel onglet créé → pas besoin de l'event atomique SPLIT_CREATED).
@@ -561,6 +587,7 @@ export function setupBrowser(window: BrowserWindow, initialSession: SessionData)
     ipcMain.removeAllListeners(IPC.TAB_HIBERNATE)
     ipcMain.removeAllListeners(IPC.SPLIT_ACTIVATE)
     ipcMain.removeAllListeners(IPC.SPLIT_CREATE)
+    ipcMain.removeAllListeners(IPC.SPLIT_CREATE_FROM_TABS)
     ipcMain.removeAllListeners(IPC.SPLIT_MOVE)
     ipcMain.removeAllListeners(IPC.SPLIT_CONVERT)
     ipcMain.removeAllListeners(IPC.SPLIT_DETACH)

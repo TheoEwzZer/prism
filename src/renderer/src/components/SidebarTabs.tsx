@@ -5,9 +5,11 @@ import {
   DragOverlay,
   PointerSensor,
   closestCorners,
+  pointerWithin,
   useSensor,
   useSensors,
   useDroppable,
+  type CollisionDetection,
   type DragEndEvent,
   type DragOverEvent,
   type DragStartEvent
@@ -24,6 +26,24 @@ import { SplitItem } from './SplitItem'
 export type DropZone = 'fav' | 'cur'
 
 type Lists = { fav: string[]; cur: string[] }
+
+const SPLIT_PREFIX = 'split:'
+
+/**
+ * Détection de collision : priorité aux zones centrales de split (`split:<id>`) via `pointerWithin`
+ * (le pointeur doit être dans le rect central) → survoler le centre d'un onglet propose un split.
+ * Sinon, tri classique (`closestCorners`) sur les onglets/zones normaux.
+ */
+const collisionDetection: CollisionDetection = (args) => {
+  const hit = pointerWithin(args).find((c) => String(c.id).startsWith(SPLIT_PREFIX))
+  if (hit) return [hit]
+  return closestCorners({
+    ...args,
+    droppableContainers: args.droppableContainers.filter(
+      (c) => !String(c.id).startsWith(SPLIT_PREFIX)
+    )
+  })
+}
 
 /** Résout le conteneur d'un id (item ou id de zone). */
 function containerOf(lists: Lists, id: string): DropZone | null {
@@ -89,6 +109,8 @@ export function SidebarTabs(): React.JSX.Element {
   }
 
   const [dragging, setDragging] = useState<string | null>(null)
+  // Onglet cible d'un aperçu de split (survol du centre d'un autre onglet), ou null.
+  const [splitTarget, setSplitTarget] = useState<string | null>(null)
   const [lists, setLists] = useState<Lists | null>(null)
   const listsRef = useRef<Lists | null>(null)
   const setBoth = (next: Lists | null): void => {
@@ -113,6 +135,13 @@ export function SidebarTabs(): React.JSX.Element {
   const onDragOver = (e: DragOverEvent): void => {
     const activeId = e.active.id as string
     const overId = e.over?.id as string | undefined
+    // Survol du centre d'un autre onglet → aperçu de split (pas de réordonnancement).
+    if (overId?.startsWith(SPLIT_PREFIX)) {
+      const targetId = overId.slice(SPLIT_PREFIX.length)
+      setSplitTarget(targetId !== activeId ? targetId : null)
+      return
+    }
+    if (splitTarget) setSplitTarget(null)
     const prev = listsRef.current
     if (!overId || !prev) return
     const from = containerOf(prev, activeId)
@@ -136,6 +165,20 @@ export function SidebarTabs(): React.JSX.Element {
   const onDragEnd = (e: DragEndEvent): void => {
     const activeId = e.active.id as string
     const overId = e.over?.id as string | undefined
+    // Drop sur le centre d'un onglet → crée une vue divisée des deux onglets (cible à gauche, déposé
+    // à droite). Pas de réordonnancement.
+    if (overId?.startsWith(SPLIT_PREFIX)) {
+      const targetId = overId.slice(SPLIT_PREFIX.length)
+      if (targetId !== activeId) {
+        window.prism.createSplitFromTabs({ firstId: targetId, secondId: activeId })
+      }
+      setSplitTarget(null)
+      setBoth(null)
+      setDragging(null)
+      document.body.removeAttribute('data-dnd-dragging')
+      return
+    }
+    setSplitTarget(null)
     const prev = listsRef.current
     if (prev && overId) {
       const zone = prev.fav.includes(activeId) ? 'fav' : 'cur'
@@ -168,11 +211,12 @@ export function SidebarTabs(): React.JSX.Element {
   return (
     <DndContext
       sensors={sensors}
-      collisionDetection={closestCorners}
+      collisionDetection={collisionDetection}
       onDragStart={onDragStart}
       onDragOver={onDragOver}
       onDragEnd={onDragEnd}
       onDragCancel={() => {
+        setSplitTarget(null)
         setBoth(null)
         setDragging(null)
         document.body.removeAttribute('data-dnd-dragging')
@@ -187,7 +231,13 @@ export function SidebarTabs(): React.JSX.Element {
             ))}
             <SortableContext items={fav} strategy={verticalListSortingStrategy}>
               {fav.map((id) => (
-                <SortableTab key={id} id={id} zone="fav" />
+                <SortableTab
+                  key={id}
+                  id={id}
+                  zone="fav"
+                  dragActive={dragging !== null}
+                  previewOtherId={splitTarget === id ? dragging : null}
+                />
               ))}
             </SortableContext>
             {fav.length === 0 && folders.length === 0 && (
@@ -227,7 +277,13 @@ export function SidebarTabs(): React.JSX.Element {
             ))}
             <SortableContext items={cur} strategy={verticalListSortingStrategy}>
               {cur.map((id) => (
-                <SortableTab key={id} id={id} zone="cur" />
+                <SortableTab
+                  key={id}
+                  id={id}
+                  zone="cur"
+                  dragActive={dragging !== null}
+                  previewOtherId={splitTarget === id ? dragging : null}
+                />
               ))}
             </SortableContext>
           </ZoneArea>
