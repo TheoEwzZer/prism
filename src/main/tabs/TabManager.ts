@@ -6,7 +6,6 @@ import {
   contentArea,
   splitPaneLayout,
   VIEW_RADIUS,
-  VIEW_INSET,
   type TabState,
   type TabPatch,
   type CreateTabInput,
@@ -43,9 +42,6 @@ function restoredTitle(meta: TabState): string {
 /** Réglages d'hibernation (ajustables). Les constantes de layout viennent de `@shared/types`. */
 const HIBERNATE_AFTER_MS = 15 * 60 * 1000 // marque un onglet inactif comme éligible
 const MAX_LIVE_VIEWS = 8 // cap strict de WebContentsView vivantes (LRU au-delà)
-/** Part de la largeur de la zone contenu réservée au panneau DevTools (docké à droite). */
-const DEVTOOLS_RATIO = 0.4
-const DEVTOOLS_MIN_WIDTH = 320
 
 interface TabEntry {
   meta: TabState
@@ -75,10 +71,6 @@ export class TabManager {
   private activeSplit: SplitActivatePayload | null = null
   // Ids des vues natives actuellement affichées (1 en plein écran, 2 en division).
   private visibleIds: string[] = []
-  // DevTools dockés à droite : rendus dans NOTRE propre WebContentsView (une vue de WebContentsView
-  // native ne peut pas docker ses DevTools dans la BrowserWindow → sinon fenêtre détachée). On la
-  // positionne nous-mêmes à droite de la page. `null` si fermés.
-  private devtools: { ownerId: string; view: WebContentsView } | null = null
 
   // Largeur de sidebar *effective* utilisée pour le layout de la vue web (0 si repliée).
   private effectiveSidebar = 256
@@ -121,8 +113,7 @@ export class TabManager {
 
   private applyBoundsNow(): void {
     const { width, height } = this.window.getContentBounds()
-    const dt = this.devtools
-    const sig = JSON.stringify({ width, height, sb: this.effectiveSidebar, active: this.activeTabId, split: this.activeSplit, dt: dt?.ownerId ?? null }) // prettier-ignore
+    const sig = JSON.stringify({ width, height, sb: this.effectiveSidebar, active: this.activeTabId, split: this.activeSplit }) // prettier-ignore
     if (sig === this.lastLayoutSig) return // rien n'a changé : pas de setBounds inutile
     this.lastLayoutSig = sig
     if (this.activeSplit) {
@@ -139,22 +130,6 @@ export class TabManager {
     }
     const area = contentArea(width, height, this.effectiveSidebar)
     const entry = this.activeTabId ? this.tabs.get(this.activeTabId) : null
-    // DevTools ouverts pour l'onglet actif : la page prend la moitié gauche, DevTools la droite.
-    if (dt && dt.ownerId === this.activeTabId && entry?.view) {
-      const dtWidth = Math.min(
-        area.width,
-        Math.max(DEVTOOLS_MIN_WIDTH, Math.round(area.width * DEVTOOLS_RATIO))
-      )
-      const pageWidth = Math.max(0, area.width - dtWidth - VIEW_INSET)
-      entry.view.setBounds({ x: area.x, y: area.y, width: pageWidth, height: area.height })
-      dt.view.setBounds({
-        x: area.x + pageWidth + VIEW_INSET,
-        y: area.y,
-        width: Math.max(0, area.width - pageWidth - VIEW_INSET),
-        height: area.height
-      })
-      return
-    }
     entry?.view?.setBounds(area)
   }
 
@@ -165,8 +140,6 @@ export class TabManager {
    * par le chrome React) mais reste comptée comme « visible ».
    */
   private showViews(ids: string[], focusedId: string | null): void {
-    // DevTools attachés à un onglet qui n'est plus affiché → on les ferme (ils sont per-vue active).
-    if (this.devtools && !ids.includes(this.devtools.ownerId)) this.closeDevToolsPanel()
     for (const vid of this.visibleIds) if (!ids.includes(vid)) this.hideView(vid)
     this.visibleIds = []
     this.lastLayoutSig = null
@@ -474,66 +447,14 @@ export class TabManager {
   // ---------------------------------------------------------------------------
 
   /**
-   * Ouvre/ferme les DevTools de la page active, dockés à DROITE. Comme la page est une
-   * `WebContentsView` (et non le `webContents` de la fenêtre), Chromium ne peut pas docker ses
-   * DevTools dans la BrowserWindow : `openDevTools({ mode: 'right' })` retombait sur une fenêtre
-   * détachée. On les rend donc dans NOTRE propre `WebContentsView` (`setDevToolsWebContents`) que
-   * l'on positionne à droite via `applyBoundsNow`, la page occupant la moitié gauche.
+   * Ouvre/ferme les DevTools NATIFS de la page active, dockés à droite. Chromium gère lui-même la
+   * barre d'outils complète (redimensionnement, bouton fermer, menu de dock left/right/bottom/undock).
    */
   toggleDevTools(): void {
-    const id = this.activeTabId
-    if (!id) return
-    if (this.devtools?.ownerId === id) this.closeDevToolsPanel()
-    else this.openDevToolsPanel(id)
-  }
-
-  /**
-   * Ouvre (ou réutilise) le panneau DevTools docké à droite pour l'onglet `id`. Retourne le
-   * `webContents` de la page inspectée (pour enchaîner un `inspectElement`), ou `null`.
-   */
-  private openDevToolsPanel(id: string): Electron.WebContents | null {
-    const wc = this.tabs.get(id)?.view?.webContents
-    if (!wc || wc.isDestroyed()) return null
-    if (this.devtools?.ownerId === id) return wc // déjà ouverts pour cet onglet
-    // Fermer d'éventuels DevTools d'un autre onglet avant d'en ouvrir de nouveaux.
-    this.closeDevToolsPanel()
-
-    const dtView = new WebContentsView()
-    dtView.setBorderRadius(VIEW_RADIUS)
-    this.window.contentView.addChildView(dtView)
-    wc.setDevToolsWebContents(dtView.webContents)
-    // `detach` : on gère nous-mêmes le placement (aucune fenêtre native n'est créée puisque la cible
-    // DevTools est notre WebContentsView).
-    wc.openDevTools({ mode: 'detach' })
-    this.devtools = { ownerId: id, view: dtView }
-
-    // Fermeture depuis l'UI DevTools (bouton × / Échap dans l'inspecteur) → nettoie notre vue.
-    wc.once('devtools-closed', () => {
-      if (this.devtools?.ownerId === id) this.closeDevToolsPanel()
-    })
-
-    this.lastLayoutSig = null
-    this.applyBoundsNow()
-    dtView.setVisible(true)
-    dtView.webContents.focus()
-    return wc
-  }
-
-  /** Ferme le panneau DevTools docké (le cas échéant) et rétablit la page en pleine largeur. */
-  private closeDevToolsPanel(): void {
-    const dt = this.devtools
-    if (!dt) return
-    this.devtools = null
-    const wc = this.tabs.get(dt.ownerId)?.view?.webContents
-    if (wc && !wc.isDestroyed() && wc.isDevToolsOpened()) wc.closeDevTools()
-    try {
-      this.window.contentView.removeChildView(dt.view)
-      if (!dt.view.webContents.isDestroyed()) dt.view.webContents.close()
-    } catch (err) {
-      console.error('[TabManager] closeDevToolsPanel', err)
-    }
-    this.lastLayoutSig = null
-    this.applyBoundsNow()
+    const wc = this.activeTabId ? this.tabs.get(this.activeTabId)?.view?.webContents : null
+    if (!wc || wc.isDestroyed()) return
+    if (wc.isDevToolsOpened()) wc.closeDevTools()
+    else wc.openDevTools({ mode: 'right' })
   }
 
   /**
@@ -556,8 +477,8 @@ export class TabManager {
         if (action.url) wc.downloadURL(action.url)
         break
       case 'inspect':
-        // Ouvre nos DevTools dockés à droite (pas une fenêtre détachée) puis pointe l'élément.
-        this.openDevToolsPanel(tabId)?.inspectElement(action.x, action.y)
+        if (!wc.isDevToolsOpened()) wc.openDevTools({ mode: 'right' })
+        wc.inspectElement(action.x, action.y)
         break
       case 'cut':
         wc.cut()
@@ -686,8 +607,6 @@ export class TabManager {
   private destroyView(entry: TabEntry): void {
     const view = entry.view
     if (!view) return
-    // Détruire la vue propriétaire des DevTools → fermer d'abord le panneau docké.
-    if (this.devtools && this.tabs.get(this.devtools.ownerId) === entry) this.closeDevToolsPanel()
     try {
       this.window.contentView.removeChildView(view)
       // `WebContents.close()` = méthode publique de destruction : libère le process de
