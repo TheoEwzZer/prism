@@ -6,8 +6,15 @@ import type {
   SessionData,
   TabPatch,
   UiPersistState,
-  UiSyncState
+  UiSyncState,
+  SplitState,
+  SplitCreatedPayload
 } from '@shared/types'
+
+/** Ne garde que les splits dont les DEUX onglets existent encore (défensif). */
+function validSplits(splits: SplitState[], tabs: Record<string, TabState>): SplitState[] {
+  return splits.filter((s) => s.tabIds.every((id) => tabs[id]))
+}
 
 /**
  * Vrai pendant l'application d'un état organisationnel reçu d'une AUTRE fenêtre (via le Main).
@@ -40,6 +47,8 @@ interface TabsState {
    *  l'appartenance ET de l'ordre des favoris ; les onglets « actuels » = racine ∉ pinnedIds. */
   pinnedIds: string[]
   folders: FolderState[]
+  /** Vues divisées actives (façon Arc). Leurs onglets membres ne sont pas listés séparément. */
+  splits: SplitState[]
   activeTabId: string | null
   sidebarCollapsed: boolean
   sidebarWidth: number
@@ -51,6 +60,8 @@ interface TabsState {
   applyBatch: (patches: Array<{ id: string; patch: TabPatch }>) => void
   addTab: (tab: TabState) => void
   removeTab: (id: string) => void
+  /** Applique une vue divisée créée par le Main (onglet + division + focus) en un seul `set`. */
+  applySplitCreated: (payload: SplitCreatedPayload) => void
   setActive: (id: string) => void
   toggleFolder: (id: string) => void
   setSidebarCollapsed: (collapsed: boolean) => void
@@ -73,6 +84,7 @@ export const useTabsStore = create<TabsState>((set, get) => ({
   order: [],
   pinnedIds: [],
   folders: [],
+  splits: [],
   activeTabId: null,
   sidebarCollapsed: false,
   sidebarWidth: 256,
@@ -93,6 +105,7 @@ export const useTabsStore = create<TabsState>((set, get) => ({
       order,
       pinnedIds,
       folders: session.folders,
+      splits: validSplits(session.splits ?? [], tabs),
       activeTabId: session.activeTabId,
       sidebarCollapsed: session.sidebarCollapsed,
       sidebarWidth: session.sidebarWidth
@@ -141,13 +154,31 @@ export const useTabsStore = create<TabsState>((set, get) => ({
       const pinnedIds = state.pinnedIds.includes(id)
         ? state.pinnedIds.filter((tid) => tid !== id)
         : state.pinnedIds
+      // Onglet membre d'une division : on dissout le split ; l'onglet restant devient normal.
+      const split = state.splits.find((s) => s.tabIds.includes(id))
+      const remaining = split?.tabIds.find((tid) => tid !== id) ?? null
+      const splits = split ? state.splits.filter((s) => s.id !== split.id) : state.splits
       let activeTabId = state.activeTabId
       if (activeTabId === id) {
-        const idx = state.order.indexOf(id)
-        activeTabId = order[Math.min(idx, order.length - 1)] ?? null
+        // Priorité au panneau restant de la division fermée (retour plein écran), sinon voisin.
+        if (remaining && tabs[remaining]) {
+          activeTabId = remaining
+        } else {
+          const idx = state.order.indexOf(id)
+          activeTabId = order[Math.min(idx, order.length - 1)] ?? null
+        }
       }
-      return { tabs, order, pinnedIds, activeTabId }
+      return { tabs, order, pinnedIds, splits, activeTabId }
     })
+  },
+
+  applySplitCreated: ({ tab, split, focusedId }): void => {
+    set((state) => ({
+      tabs: state.tabs[tab.id] ? state.tabs : { ...state.tabs, [tab.id]: tab },
+      order: state.order.includes(tab.id) ? state.order : [...state.order, tab.id],
+      splits: state.splits.some((s) => s.id === split.id) ? state.splits : [...state.splits, split],
+      activeTabId: focusedId
+    }))
   },
 
   setActive: (id): void => set({ activeTabId: id }),
@@ -190,6 +221,7 @@ export const useTabsStore = create<TabsState>((set, get) => ({
           order,
           pinnedIds,
           folders: sync.folders,
+          splits: validSplits(sync.splits ?? [], state.tabs),
           activeTabId: sync.activeTabId
         }
       })
@@ -204,6 +236,7 @@ export const useTabsStore = create<TabsState>((set, get) => ({
       order: s.order,
       pinnedTabIds: s.pinnedIds,
       folders: s.folders,
+      splits: validSplits(s.splits, s.tabs),
       activeTabId: s.activeTabId,
       sidebarWidth: s.sidebarWidth,
       sidebarCollapsed: s.sidebarCollapsed

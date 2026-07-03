@@ -5,7 +5,8 @@ import {
   IPC,
   type SiteControlPayload,
   type CommandPalettePayload,
-  type TabMenuPayload
+  type TabMenuPayload,
+  type SplitMenuPayload
 } from '@shared/types'
 
 /** Durée de l'animation de repli/dépli (doit rester synchro avec la transition CSS du masque). */
@@ -33,6 +34,7 @@ export class OverlayLayer {
   private ready = false
   private siteControl: SiteControlPayload | null = null
   private tabMenu: TabMenuPayload | null = null
+  private splitMenu: SplitMenuPayload | null = null
   private command: CommandPalettePayload | null = null
   private peekOpen = false
   // Largeur du peek mémorisée : conservée à la fermeture pour que le slide-out (`-translate-x-full`,
@@ -98,6 +100,30 @@ export class OverlayLayer {
     this.tabMenu = null
     this.lastHideAt = Date.now()
     this.send(IPC.OVERLAY_TAB_MENU_DATA, null)
+  }
+
+  /**
+   * Menu « Options de vue divisée » (bouton de la TopBar). Toggle façon Contrôles du site : rouvrir
+   * alors qu'il est ouvert le referme, et on ignore un ré-ouvrir juste après une fermeture (< 250 ms)
+   * pour que le clic sur le bouton, qui a lui-même provoqué le blur/fermeture, ne le rouvre pas.
+   */
+  toggleSplitMenu(payload: SplitMenuPayload): void {
+    if (this.splitMenu !== null) {
+      this.hideSplitMenu()
+      return
+    }
+    if (Date.now() - this.lastHideAt < 250) return
+    this.splitMenu = payload
+    const win = this.ensureWindow()
+    win.focus()
+    this.send(IPC.OVERLAY_SPLIT_MENU_DATA, payload)
+  }
+
+  hideSplitMenu(): void {
+    if (this.splitMenu === null) return
+    this.splitMenu = null
+    this.lastHideAt = Date.now()
+    this.send(IPC.OVERLAY_SPLIT_MENU_DATA, null)
   }
 
   /**
@@ -268,6 +294,7 @@ export class OverlayLayer {
       // Resynchronise l'état courant après (re)chargement.
       this.send(IPC.OVERLAY_SITE_CONTROL_DATA, this.siteControl)
       this.send(IPC.OVERLAY_TAB_MENU_DATA, this.tabMenu)
+      this.send(IPC.OVERLAY_SPLIT_MENU_DATA, this.splitMenu)
       this.send(IPC.OVERLAY_COMMAND_DATA, this.command)
       this.send(IPC.SIDEBAR_PEEK_STATE, { open: this.peekOpen, width: this.peekWidth })
     })

@@ -8,7 +8,8 @@ import type {
   SidebarToggleMaskState,
   SidebarLayoutState,
   CommandPalettePayload,
-  TabMenuPayload
+  TabMenuPayload,
+  SplitMenuPayload
 } from '@shared/types'
 import { SIDEBAR_DEFAULT_WIDTH } from '@shared/types'
 import { PeekSidebar } from './PeekSidebar'
@@ -16,6 +17,7 @@ import { SidebarToggleMask } from './SidebarToggleMask'
 import { SidebarResizeHandle } from './SidebarResizeHandle'
 import { SiteControlPopover } from './SiteControlPopover'
 import { TabContextMenu } from './TabContextMenu'
+import { SplitMenu } from './SplitMenu'
 import { CommandPalette } from './CommandPalette'
 
 const PEEK_ARM_MS = 150
@@ -48,6 +50,7 @@ export function OverlayLayer(): React.JSX.Element {
   const [dragWidth, setDragWidth] = useState<number | null>(null)
   const [site, setSite] = useState<SiteControlPayload | null>(null)
   const [tabMenu, setTabMenu] = useState<TabMenuPayload | null>(null)
+  const [splitMenu, setSplitMenu] = useState<SplitMenuPayload | null>(null)
   const [command, setCommand] = useState<CommandPalettePayload | null>(null)
   // Édition inline d'un onglet en cours (dans le peek) : « épingle » le peek (cf. hit-test).
   const renaming = useTabsStore((s) => s.renamingTabId !== null)
@@ -69,6 +72,7 @@ export function OverlayLayer(): React.JSX.Element {
   useEffect(() => window.prism.onSidebarLayout(setLayout), [])
   useEffect(() => window.prism.onSiteControlData(setSite), [])
   useEffect(() => window.prism.onTabMenuData(setTabMenu), [])
+  useEffect(() => window.prism.onSplitMenuData(setSplitMenu), [])
   useEffect(() => window.prism.onCommandData(setCommand), [])
 
   // --- Click-through : hit-test global ---
@@ -149,7 +153,13 @@ export function OverlayLayer(): React.JSX.Element {
 
   // Réagit aux changements d'ouverture : (dé)verrouille la capture et arme la fermeture du peek.
   // La poignée de resize a besoin, elle aussi, que la couche hit-teste (pour être saisissable).
-  const anyOpen = peek.open || site !== null || tabMenu !== null || command !== null || resizeActive
+  const anyOpen =
+    peek.open ||
+    site !== null ||
+    tabMenu !== null ||
+    splitMenu !== null ||
+    command !== null ||
+    resizeActive
   useEffect(() => {
     anyOpenRef.current = anyOpen
     peekOpenRef.current = peek.open
@@ -226,6 +236,28 @@ export function OverlayLayer(): React.JSX.Element {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [renaming])
 
+  // Menu « Options de vue divisée » : fermeture au clic extérieur (blur) / Échap / clic ailleurs
+  // dans l'overlay. Même logique que le menu contextuel d'onglet.
+  useEffect(() => {
+    if (!splitMenu) return
+    const onBlur = (): void => window.prism.closeSplitMenu()
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') window.prism.closeSplitMenu()
+    }
+    const onDown = (e: PointerEvent): void => {
+      const el = e.target as HTMLElement | null
+      if (!el?.closest('[data-overlay-hit="splitmenu"]')) window.prism.closeSplitMenu()
+    }
+    window.addEventListener('blur', onBlur)
+    window.addEventListener('keydown', onKey)
+    window.addEventListener('pointerdown', onDown)
+    return () => {
+      window.removeEventListener('blur', onBlur)
+      window.removeEventListener('keydown', onKey)
+      window.removeEventListener('pointerdown', onDown)
+    }
+  }, [splitMenu])
+
   // Palette de commande : même logique (clic extérieur / Échap). Échap est géré ici plutôt que
   // par cmdk pour fermer la fenêtre-overlay (et pas seulement vider le champ).
   useEffect(() => {
@@ -272,6 +304,7 @@ export function OverlayLayer(): React.JSX.Element {
       )}
       {site && <SiteControlPopover data={site} />}
       {tabMenu && <TabContextMenu data={tabMenu} />}
+      {splitMenu && <SplitMenu data={splitMenu} />}
       {command && <CommandPalette data={command} />}
     </div>
   )

@@ -32,6 +32,146 @@ export interface FolderState {
   collapsed: boolean
 }
 
+/** Orientation d'une vue divisée : `horizontal` = côte à côte (G→D), `vertical` = empilé (H→B). */
+export type SplitOrientation = 'horizontal' | 'vertical'
+
+/**
+ * Vue divisée (façon Arc) : deux onglets affichés simultanément. `tabIds` est ordonné dans le sens
+ * visuel (gauche→droite pour `horizontal`, haut→bas pour `vertical`). MVP : exactement 2 panneaux.
+ */
+export interface SplitState {
+  id: string
+  orientation: SplitOrientation
+  tabIds: [string, string]
+}
+
+/** Position du NOUVEAU panneau relativement à l'onglet actif (choix du menu de la TopBar). */
+export type SplitPosition = 'right' | 'left' | 'top' | 'bottom'
+
+/** Demande de création d'une vue divisée (Renderer -> Main, orchestrée par le Main). */
+export interface SplitCreateInput {
+  position: SplitPosition
+  /** Onglet source (deviendra l'autre panneau de la division). */
+  sourceId: string
+}
+
+/**
+ * Vue divisée créée, diffusée par le Main aux DEUX fenêtres en UN SEUL event atomique : le nouvel
+ * onglet + la division + le focus sont appliqués ensemble (un seul `set`). Indispensable pour éviter
+ * une course de persistance : si l'onglet était ajouté séparément (tab:created), la fenêtre
+ * renverrait un `saveUiState` avec `splits` encore vide, écrasant la division tout juste créée.
+ */
+export interface SplitCreatedPayload {
+  tab: TabState
+  split: SplitState
+  focusedId: string
+}
+
+// ---------------------------------------------------------------------------
+// Géométrie du layout — source UNIQUE partagée Main <-> Renderer.
+//
+// Le Main l'utilise pour les bounds natifs des WebContentsView ; le Renderer l'utilise pour
+// positionner les barres d'outils par panneau (vue divisée), en coordonnées client alignées 1:1.
+// ---------------------------------------------------------------------------
+
+/** Hauteur de la barre supérieure pleine largeur (doit rester synchro avec la classe `h-8`). */
+export const TOPBAR_HEIGHT = 32
+/** Marge autour de la vue (look "carte" arrondie façon Arc). */
+export const VIEW_INSET = 8
+export const VIEW_RADIUS = 10
+/** Hauteur de la barre d'outils propre à chaque panneau en vue divisée. */
+export const SPLIT_TOOLBAR_HEIGHT = 36
+
+export interface LayoutRect {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+/** Aire de base disponible pour la/les vue(s) web (sous la top bar, à droite de la sidebar). */
+export function contentArea(
+  contentW: number,
+  contentH: number,
+  effectiveSidebar: number
+): LayoutRect {
+  return {
+    x: effectiveSidebar + VIEW_INSET,
+    y: TOPBAR_HEIGHT,
+    width: Math.max(0, contentW - effectiveSidebar - VIEW_INSET * 2),
+    height: Math.max(0, contentH - TOPBAR_HEIGHT - VIEW_INSET)
+  }
+}
+
+/** Découpe une aire en deux moitiés (gouttière `VIEW_INSET`) selon l'orientation. */
+function splitHalves(area: LayoutRect, orientation: SplitOrientation): [LayoutRect, LayoutRect] {
+  if (orientation === 'horizontal') {
+    const wHalf = Math.max(0, Math.floor((area.width - VIEW_INSET) / 2))
+    return [
+      { x: area.x, y: area.y, width: wHalf, height: area.height },
+      {
+        x: area.x + wHalf + VIEW_INSET,
+        y: area.y,
+        width: Math.max(0, area.width - wHalf - VIEW_INSET),
+        height: area.height
+      }
+    ]
+  }
+  const hHalf = Math.max(0, Math.floor((area.height - VIEW_INSET) / 2))
+  return [
+    { x: area.x, y: area.y, width: area.width, height: hHalf },
+    {
+      x: area.x,
+      y: area.y + hHalf + VIEW_INSET,
+      width: area.width,
+      height: Math.max(0, area.height - hHalf - VIEW_INSET)
+    }
+  ]
+}
+
+/**
+ * Layout d'une vue divisée : pour chaque panneau, le rect de sa barre d'outils (haut) et de sa
+ * vue web (dessous). Ratio 50/50 fixe (MVP).
+ */
+export function splitPaneLayout(
+  contentW: number,
+  contentH: number,
+  effectiveSidebar: number,
+  orientation: SplitOrientation
+): Array<{ toolbar: LayoutRect; view: LayoutRect }> {
+  const area = contentArea(contentW, contentH, effectiveSidebar)
+  return splitHalves(area, orientation).map((h) => ({
+    toolbar: { x: h.x, y: h.y, width: h.width, height: SPLIT_TOOLBAR_HEIGHT },
+    view: {
+      x: h.x,
+      y: h.y + SPLIT_TOOLBAR_HEIGHT,
+      width: h.width,
+      height: Math.max(0, h.height - SPLIT_TOOLBAR_HEIGHT)
+    }
+  }))
+}
+
+/**
+ * Demande d'activation d'une division (browser state) : le Main affiche les deux vues natives.
+ * `focusedId` = panneau qui reçoit le focus clavier.
+ */
+export interface SplitActivatePayload {
+  orientation: SplitOrientation
+  tabIds: [string, string]
+  focusedId: string
+}
+
+/**
+ * Menu « Options de vue divisée » (bouton de la TopBar), rendu dans la couche d'overlay (au-dessus
+ * de la vue web native). `x`/`y` = coin haut-gauche voulu, en coordonnées client (alignées 1:1 sur
+ * la fenêtre principale). `activeId` = onglet source qui deviendra un des panneaux.
+ */
+export interface SplitMenuPayload {
+  x: number
+  y: number
+  activeId: string | null
+}
+
 /** État de session persisté sur disque et restauré au démarrage. */
 export interface SessionData {
   tabs: TabState[]
@@ -40,6 +180,8 @@ export interface SessionData {
   order: string[]
   /** Onglets « favoris » (épinglés), dans l'ordre de la liste de favoris de la sidebar. */
   pinnedTabIds: string[]
+  /** Vues divisées actives (façon Arc). */
+  splits: SplitState[]
   activeTabId: string | null
   sidebarWidth: number
   sidebarCollapsed: boolean
@@ -59,6 +201,7 @@ export interface UiPersistState {
   order: string[]
   pinnedTabIds: string[]
   folders: FolderState[]
+  splits: SplitState[]
   activeTabId: string | null
   sidebarWidth: number
   sidebarCollapsed: boolean
@@ -73,6 +216,7 @@ export interface UiSyncState {
   order: string[]
   pinnedTabIds: string[]
   folders: FolderState[]
+  splits: SplitState[]
   activeTabId: string | null
 }
 
@@ -118,6 +262,8 @@ export const IPC = {
   TAB_FORWARD: 'tab:forward',
   TAB_RELOAD: 'tab:reload',
   TAB_HIBERNATE: 'tab:hibernate', // send : hiberne manuellement un onglet (menu contextuel)
+  SPLIT_CREATE: 'split:create', // send : crée une vue divisée (orchestré par le Main)
+  SPLIT_ACTIVATE: 'split:activate', // send : affiche une vue divisée (2 vues natives simultanées)
   TAB_RENAME: 'tab:rename', // send : renomme un onglet (customTitle) via le menu contextuel
   TAB_RENAME_STATE: 'tab:renameState', // window <-> Main : onglet en édition inline (id | null), diffusé
   VIEW_SET_SIDEBAR: 'view:setSidebar',
@@ -138,6 +284,8 @@ export const IPC = {
   OVERLAY_SET_IGNORE: 'overlay:setIgnore', // overlay -> Main : capter/laisser passer la souris
   OVERLAY_TAB_MENU: 'overlay:tabMenu', // main -> Main : clic droit sur un onglet (menu contextuel)
   OVERLAY_TAB_MENU_CLOSE: 'overlay:tabMenuClose', // overlay -> Main : fermer le menu contextuel
+  OVERLAY_SPLIT_MENU: 'overlay:splitMenu', // main -> Main : ouvrir le menu « Options de vue divisée »
+  OVERLAY_SPLIT_MENU_CLOSE: 'overlay:splitMenuClose', // overlay -> Main : fermer le menu split
   SIDEBAR_PEEK_OPEN: 'sidebar:peekOpen', // main -> Main : survol du bord gauche
   SIDEBAR_PEEK_CLOSE: 'sidebar:peekClose', // overlay -> Main : souris sortie du panneau
   SIDEBAR_SET_WIDTH: 'sidebar:setWidth', // overlay -> Main : drag de la poignée de resize (px)
@@ -149,6 +297,7 @@ export const IPC = {
   // Main -> Renderer (events)
   OVERLAY_SITE_CONTROL_DATA: 'overlay:siteControlData', // Main -> overlay : push données (ou null)
   OVERLAY_TAB_MENU_DATA: 'overlay:tabMenuData', // Main -> overlay : ouvrir/fermer le menu (ou null)
+  OVERLAY_SPLIT_MENU_DATA: 'overlay:splitMenuData', // Main -> overlay : ouvrir/fermer le menu split
   OVERLAY_COMMAND_DATA: 'overlay:commandData', // Main -> overlay : ouvrir/fermer la palette (ou null)
   HISTORY_OPEN: 'history:open', // Main -> Renderer : ouvrir/focus l'onglet prism://history/ (Ctrl+H)
   SIDEBAR_PEEK_STATE: 'sidebar:peekState', // Main -> overlay : ouverture/fermeture animée
@@ -159,6 +308,7 @@ export const IPC = {
   TAB_UPDATED: 'tab:updated',
   TAB_CREATED: 'tab:created',
   TAB_CLOSED: 'tab:closed',
+  SPLIT_CREATED: 'split:created', // Main -> deux fenêtres : onglet + division + focus (atomique)
   SESSION_LOADED: 'session:loaded',
   WINDOW_STATE: 'window:state'
 } as const
@@ -224,8 +374,15 @@ export interface TabMenuPayload {
   y: number
 }
 
-/** Contexte d'ouverture de la palette de commande (façon Arc). */
-export type CommandMode = 'newTab' | 'currentTab'
+/**
+ * Contexte d'ouverture de la palette de commande (façon Arc).
+ * - `newTab` : Entrée crée un onglet.
+ * - `currentTab` : Entrée navigue l'onglet actif (`activeId`).
+ * - `split` : ouverte pour remplir le panneau vide d'une vue divisée (`activeId` = ce panneau).
+ *   Entrée navigue ce panneau ; choisir un onglet ouvert charge SON URL dans ce panneau (pas de
+ *   switch, qui dissoudrait le split).
+ */
+export type CommandMode = 'newTab' | 'currentTab' | 'split'
 
 /**
  * Payload d'ouverture de la palette de commande transmis à la couche d'overlay.

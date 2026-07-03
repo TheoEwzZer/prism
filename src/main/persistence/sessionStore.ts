@@ -16,6 +16,7 @@ const DEFAULT_SESSION: SessionData = {
   folders: [],
   order: [],
   pinnedTabIds: [],
+  splits: [],
   activeTabId: null,
   sidebarWidth: 256,
   sidebarCollapsed: false

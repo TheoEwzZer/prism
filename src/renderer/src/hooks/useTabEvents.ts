@@ -11,6 +11,7 @@ export function useTabEvents(): void {
   const applyBatch = useTabsStore((s) => s.applyBatch)
   const addTab = useTabsStore((s) => s.addTab)
   const removeTab = useTabsStore((s) => s.removeTab)
+  const applySplitCreated = useTabsStore((s) => s.applySplitCreated)
   const applyRemoteUi = useTabsStore((s) => s.applyRemoteUi)
   const setRenamingTab = useTabsStore((s) => s.setRenamingTab)
   const lastBatchId = useRef(0)
@@ -28,6 +29,9 @@ export function useTabEvents(): void {
   // Main est la source unique qui diffuse aux deux fenêtres ; on met à jour le store (idempotent).
   useEffect(() => window.prism.onTabCreated(addTab), [addTab])
   useEffect(() => window.prism.onTabClosed(removeTab), [removeTab])
+
+  // Vue divisée créée : onglet + division + focus appliqués atomiquement (anti-course de persistance).
+  useEffect(() => window.prism.onSplitCreated(applySplitCreated), [applySplitCreated])
 
   // Convergence de l'état organisationnel (ordre, favoris, dossiers, onglet actif) rediffusé
   // par le Main depuis l'AUTRE fenêtre (principale ↔ overlay). Anti-écho géré dans le store.

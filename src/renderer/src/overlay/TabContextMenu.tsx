@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef, useState } from 'react'
-import { Copy, Pencil } from 'lucide-react'
+import { Copy, Pencil, Columns2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { TabMenuPayload } from '@shared/types'
 
@@ -40,6 +40,12 @@ export function TabContextMenu({ data }: Readonly<{ data: TabMenuPayload }>): Re
     window.prism.setTabRenaming(tabId)
     close()
   }
+  const addSplit = (): void => {
+    // Équivalent de « Ajouter une division à droite » : cet onglet reste à gauche, nouveau panneau à
+    // droite, puis la palette de commande s'ouvre pour choisir le site (orchestré côté Main).
+    window.prism.createSplit({ position: 'right', sourceId: tabId })
+    close()
+  }
 
   return (
     <div
@@ -58,6 +64,11 @@ export function TabContextMenu({ data }: Readonly<{ data: TabMenuPayload }>): Re
         onClick={copyUrl}
       />
       <Row icon={<Pencil className="size-4" />} label="Renommer" onClick={rename} />
+      <Row
+        icon={<Columns2 className="size-4" />}
+        label="Ajouter une vue divisée"
+        onClick={addSplit}
+      />
     </div>
   )
 }

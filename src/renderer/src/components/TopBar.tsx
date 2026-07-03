@@ -2,6 +2,7 @@ import { Settings, PanelLeft, ArrowLeft, ArrowRight, RotateCw } from 'lucide-rea
 import { cn } from '@/lib/utils'
 import { useTabsStore } from '@/store/tabsStore'
 import { Omnibox } from './Omnibox'
+import { SplitViewButton } from './SplitViewButton'
 
 /**
  * Barre supérieure pleine largeur (façon Arc). Emplacements :
@@ -20,6 +21,10 @@ export function TopBar(): React.JSX.Element {
   const activeId = useTabsStore((s) => s.activeTabId)
   const canGoBack = useTabsStore((s) => (activeId ? s.tabs[activeId]?.canGoBack : false))
   const canGoForward = useTabsStore((s) => (activeId ? s.tabs[activeId]?.canGoForward : false))
+  // En vue divisée, chaque panneau a sa propre barre (omnibox + nav) : on masque l'omnibox global.
+  const inSplit = useTabsStore((s) =>
+    activeId ? s.splits.some((sp) => sp.tabIds.includes(activeId)) : false
+  )
 
   const nav = (
     <>
@@ -51,11 +56,13 @@ export function TopBar(): React.JSX.Element {
     <div className="app-drag relative flex h-8 shrink-0 items-center border-b border-white/5 bg-sidebar">
       {/* Omnibox centrée sur la largeur totale de la fenêtre (pas sur la zone web), pour rester
           visuellement au milieu quelle que soit la largeur de la sidebar. */}
-      <div className="pointer-events-none absolute inset-x-0 flex justify-center">
-        <div className="app-no-drag pointer-events-auto flex max-w-[60%] justify-center">
-          <Omnibox />
+      {!inSplit && (
+        <div className="pointer-events-none absolute inset-x-0 flex justify-center">
+          <div className="app-no-drag pointer-events-auto flex max-w-[60%] justify-center">
+            <Omnibox />
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Zone gauche. Ouverte : largeur = sidebar, nav collée au bord droit. Repliée : cluster
           compact auto (pas d'espace vide), avec la nav toujours visible. */}
@@ -87,8 +94,11 @@ export function TopBar(): React.JSX.Element {
 
       {/* Zone droite — au-dessus de la zone web : URL centrée. Les boutons min/agrandir/fermer
           sont dessinés nativement par Windows (Window Controls Overlay, cf. index.ts) dans le
-          coin haut-droit → ils déclenchent les Snap Layouts. On réserve leur largeur à droite. */}
-      <div className="pointer-events-none relative flex h-full flex-1 items-center px-2" />
+          coin haut-droit → ils déclenchent les Snap Layouts. On réserve leur largeur à droite
+          (~138 px pour 3 boutons) et on place le bouton de vue divisée juste à leur gauche. */}
+      <div className="pointer-events-none relative flex h-full flex-1 items-center justify-end pr-[138px] pl-2">
+        <SplitViewButton />
+      </div>
     </div>
   )
 }

@@ -18,6 +18,7 @@ import { useTabsStore } from '@/store/tabsStore'
 import { TabItem } from './TabItem'
 import { SortableTab } from './SortableTab'
 import { Folder } from './Folder'
+import { SplitItem } from './SplitItem'
 
 /** Les deux zones triables de la sidebar. Sert aussi d'id de conteneur droppable (dépôt à vide). */
 export type DropZone = 'fav' | 'cur'
@@ -63,13 +64,17 @@ export function SidebarTabs(): React.JSX.Element {
   const order = useTabsStore((s) => s.order)
   const pinnedIds = useTabsStore((s) => s.pinnedIds)
   const folders = useTabsStore((s) => s.folders)
+  const splits = useTabsStore((s) => s.splits)
   const commitLists = useTabsStore((s) => s.commitLists)
   const removeTab = useTabsStore((s) => s.removeTab)
 
   // Lecture non réactive : le regroupement ne dépend que de `order`/`pinnedIds`/`folders`.
   const tabs = useTabsStore.getState().tabs
   const pinnedSet = new Set(pinnedIds)
-  const isRoot = (id: string): boolean => Boolean(tabs[id]) && tabs[id].parentFolderId === null
+  // Onglets membres d'une division : exclus des listes normales (rendus dans leur pilule SplitItem).
+  const splitMemberSet = new Set(splits.flatMap((s) => s.tabIds))
+  const isRoot = (id: string): boolean =>
+    Boolean(tabs[id]) && tabs[id].parentFolderId === null && !splitMemberSet.has(id)
 
   const favBase = pinnedIds.filter(isRoot)
   const curBase = order.filter((id) => isRoot(id) && !pinnedSet.has(id))
@@ -78,6 +83,7 @@ export function SidebarTabs(): React.JSX.Element {
   const childrenByFolder = new Map<string, string[]>()
   for (const f of folders) childrenByFolder.set(f.id, [])
   for (const id of order) {
+    if (splitMemberSet.has(id)) continue
     const parent = tabs[id]?.parentFolderId
     if (parent && childrenByFolder.has(parent)) childrenByFolder.get(parent)!.push(id)
   }
@@ -215,6 +221,10 @@ export function SidebarTabs(): React.JSX.Element {
               <Plus className="size-4" />
               <span>Nouvel onglet</span>
             </button>
+            {/* Vues divisées : pilules groupées (non-draggable), avant les onglets normaux. */}
+            {splits.map((s) => (
+              <SplitItem key={s.id} split={s} />
+            ))}
             <SortableContext items={cur} strategy={verticalListSortingStrategy}>
               {cur.map((id) => (
                 <SortableTab key={id} id={id} zone="cur" />

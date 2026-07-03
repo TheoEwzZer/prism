@@ -76,17 +76,27 @@ export function CommandPalette({ data }: { data: CommandPalettePayload }): React
 
   const close = (): void => window.prism.closeCommandPalette()
 
-  // Saisie d'URL/recherche (ou item d'historique) → onglet courant (clic URL) ou nouvel onglet.
+  // `currentTab`/`split` naviguent l'onglet/panneau cible (`activeId`) ; `newTab` crée un onglet.
+  const navigatesTarget = mode === 'currentTab' || mode === 'split'
+
+  // Saisie d'URL/recherche (ou item d'historique) → cible (onglet courant / panneau vide) ou nouvel onglet.
   const openInput = (raw: string): void => {
     const input = raw.trim()
     if (!input) return
-    if (mode === 'currentTab' && activeId) window.prism.navigate(activeId, input)
+    if (navigatesTarget && activeId) window.prism.navigate(activeId, input)
     else window.prism.createTab({ url: input })
     close()
   }
 
-  const switchTo = (id: string): void => {
-    window.prism.activateTab(id)
+  // Onglet ouvert sélectionné : en mode `split`, on ne bascule PAS (ça dissoudrait la division) —
+  // on charge l'URL de cet onglet dans le panneau vide. Sinon, bascule classique vers l'onglet.
+  const onOpenTab = (tab: TabState): void => {
+    if (mode === 'split') {
+      if (activeId) window.prism.navigate(activeId, tab.url)
+      close()
+      return
+    }
+    window.prism.activateTab(tab.id)
     close()
   }
 
@@ -153,15 +163,17 @@ export function CommandPalette({ data }: { data: CommandPalettePayload }): React
                 <CommandItem
                   key={t.id}
                   value={`tab:${t.id}`}
-                  onSelect={() => switchTo(t.id)}
+                  onSelect={() => onOpenTab(t)}
                   className="gap-2.5"
                 >
                   <Favicon favicon={t.favicon} />
                   <span className="min-w-0 flex-1 truncate">{t.title || t.url || 'Onglet'}</span>
-                  <span className="ml-auto flex shrink-0 items-center gap-1 text-xs text-slate-500">
-                    Aller à l'onglet
-                    <ArrowRight className="size-3.5" />
-                  </span>
+                  {mode !== 'split' && (
+                    <span className="ml-auto flex shrink-0 items-center gap-1 text-xs text-slate-500">
+                      Aller à l&apos;onglet
+                      <ArrowRight className="size-3.5" />
+                    </span>
+                  )}
                 </CommandItem>
               ))}
             </CommandGroup>

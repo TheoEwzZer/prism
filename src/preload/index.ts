@@ -18,7 +18,11 @@ import {
   type CommandPalettePayload,
   type HistoryEntry,
   type HistoryListInput,
-  type HistoryListResult
+  type HistoryListResult,
+  type SplitActivatePayload,
+  type SplitMenuPayload,
+  type SplitCreateInput,
+  type SplitCreatedPayload
 } from '@shared/types'
 
 /** Abonnement typé à un event Main -> Renderer ; retourne une fonction de désabonnement. */
@@ -44,6 +48,9 @@ const prism = {
   goForward: (id: string): void => ipcRenderer.send(IPC.TAB_FORWARD, id),
   reload: (id: string): void => ipcRenderer.send(IPC.TAB_RELOAD, id),
   hibernateTab: (id: string): void => ipcRenderer.send(IPC.TAB_HIBERNATE, id),
+  createSplit: (input: SplitCreateInput): void => ipcRenderer.send(IPC.SPLIT_CREATE, input),
+  activateSplit: (payload: SplitActivatePayload): void =>
+    ipcRenderer.send(IPC.SPLIT_ACTIVATE, payload),
   renameTab: (id: string, title: string | null): void =>
     ipcRenderer.send(IPC.TAB_RENAME, { id, title }),
   // Démarre/arrête l'édition inline d'un onglet (id ou null) ; le Main diffuse aux deux fenêtres.
@@ -79,11 +86,14 @@ const prism = {
     ipcRenderer.send(IPC.OVERLAY_SITE_CONTROL, payload),
   openSidebarPeek: (): void => ipcRenderer.send(IPC.SIDEBAR_PEEK_OPEN),
   openTabMenu: (payload: TabMenuPayload): void => ipcRenderer.send(IPC.OVERLAY_TAB_MENU, payload),
+  openSplitMenu: (payload: SplitMenuPayload): void =>
+    ipcRenderer.send(IPC.OVERLAY_SPLIT_MENU, payload),
   openCommandPalette: (payload: CommandPalettePayload): void =>
     ipcRenderer.send(IPC.OVERLAY_COMMAND, payload),
   // Depuis la couche d'overlay elle-même :
   closeSiteControl: (): void => ipcRenderer.send(IPC.OVERLAY_CLOSE),
   closeCommandPalette: (): void => ipcRenderer.send(IPC.OVERLAY_COMMAND_CLOSE),
+  closeSplitMenu: (): void => ipcRenderer.send(IPC.OVERLAY_SPLIT_MENU_CLOSE),
   closeSidebarPeek: (): void => ipcRenderer.send(IPC.SIDEBAR_PEEK_CLOSE),
   closeTabMenu: (): void => ipcRenderer.send(IPC.OVERLAY_TAB_MENU_CLOSE),
   setOverlayIgnoreMouse: (ignore: boolean): void =>
@@ -92,6 +102,8 @@ const prism = {
     subscribe(IPC.OVERLAY_SITE_CONTROL_DATA, cb),
   onTabMenuData: (cb: (payload: TabMenuPayload | null) => void): (() => void) =>
     subscribe(IPC.OVERLAY_TAB_MENU_DATA, cb),
+  onSplitMenuData: (cb: (payload: SplitMenuPayload | null) => void): (() => void) =>
+    subscribe(IPC.OVERLAY_SPLIT_MENU_DATA, cb),
   onCommandData: (cb: (payload: CommandPalettePayload | null) => void): (() => void) =>
     subscribe(IPC.OVERLAY_COMMAND_DATA, cb),
   onSidebarPeekState: (cb: (state: SidebarPeekState) => void): (() => void) =>
@@ -114,6 +126,8 @@ const prism = {
     subscribe(IPC.TAB_UPDATED, cb),
   onTabCreated: (cb: (tab: TabState) => void): (() => void) => subscribe(IPC.TAB_CREATED, cb),
   onTabClosed: (cb: (id: string) => void): (() => void) => subscribe(IPC.TAB_CLOSED, cb),
+  onSplitCreated: (cb: (payload: SplitCreatedPayload) => void): (() => void) =>
+    subscribe(IPC.SPLIT_CREATED, cb),
   onUiStateSync: (cb: (sync: UiSyncState) => void): (() => void) =>
     subscribe(IPC.UI_STATE_SYNC, cb),
   onWindowState: (cb: (state: WindowState) => void): (() => void) => subscribe(IPC.WINDOW_STATE, cb)

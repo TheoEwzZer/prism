@@ -1,11 +1,15 @@
-import { BrowserWindow, WebContentsView, shell, type Rectangle } from 'electron'
+import { BrowserWindow, WebContentsView, shell } from 'electron'
 import { randomUUID } from 'crypto'
 import {
   isInternalUrl,
   internalPageTitle,
+  contentArea,
+  splitPaneLayout,
+  VIEW_RADIUS,
   type TabState,
   type TabPatch,
-  type CreateTabInput
+  type CreateTabInput,
+  type SplitActivatePayload
 } from '@shared/types'
 import { FrameCoalescer } from '../utils/scheduler'
 
@@ -33,15 +37,9 @@ function restoredTitle(meta: TabState): string {
   return t
 }
 
-/** Réglages d'hibernation / layout (ajustables). */
+/** Réglages d'hibernation (ajustables). Les constantes de layout viennent de `@shared/types`. */
 const HIBERNATE_AFTER_MS = 15 * 60 * 1000 // marque un onglet inactif comme éligible
 const MAX_LIVE_VIEWS = 8 // cap strict de WebContentsView vivantes (LRU au-delà)
-const VIEW_INSET = 8 // marge autour de la vue (look "carte" arrondie façon Arc)
-const VIEW_RADIUS = 10
-// Hauteur de la barre supérieure pleine largeur (doit rester synchronisée avec la classe
-// `h-8` de <TopBar> côté renderer). La vue web démarre juste sous cette barre : la barre
-// englobe déjà la marge haute de la carte, donc pas de VIEW_INSET supplémentaire en haut.
-const TOPBAR_HEIGHT = 32
 
 interface TabEntry {
   meta: TabState
@@ -67,6 +65,10 @@ export interface HistoryHooks {
 export class TabManager {
   private readonly tabs = new Map<string, TabEntry>()
   private activeTabId: string | null = null
+  // Vue divisée active (2 vues natives simultanées), ou null pour le mode plein écran classique.
+  private activeSplit: SplitActivatePayload | null = null
+  // Ids des vues natives actuellement affichées (1 en plein écran, 2 en division).
+  private visibleIds: string[] = []
 
   // Largeur de sidebar *effective* utilisée pour le layout de la vue web (0 si repliée).
   private effectiveSidebar = 256
@@ -105,27 +107,69 @@ export class TabManager {
     this.boundsCoalescer.schedule()
   }
 
-  /** Aire de base disponible pour la vue web (sous la top bar, à droite de la sidebar). */
-  private computeBounds(): Rectangle {
+  private applyBoundsNow(): void {
     const { width, height } = this.window.getContentBounds()
-    const sidebar = this.effectiveSidebar
-    const x = sidebar + VIEW_INSET
-    const y = TOPBAR_HEIGHT
-    return {
-      x,
-      y,
-      width: Math.max(0, width - sidebar - VIEW_INSET * 2),
-      height: Math.max(0, height - TOPBAR_HEIGHT - VIEW_INSET)
+    const sig = JSON.stringify({ width, height, sb: this.effectiveSidebar, active: this.activeTabId, split: this.activeSplit }) // prettier-ignore
+    if (sig === this.lastLayoutSig) return // rien n'a changé : pas de setBounds inutile
+    this.lastLayoutSig = sig
+    if (this.activeSplit) {
+      const [a, b] = this.activeSplit.tabIds
+      const panes = splitPaneLayout(
+        width,
+        height,
+        this.effectiveSidebar,
+        this.activeSplit.orientation
+      )
+      this.tabs.get(a)?.view?.setBounds(panes[0].view)
+      this.tabs.get(b)?.view?.setBounds(panes[1].view)
+      return
+    }
+    const area = contentArea(width, height, this.effectiveSidebar)
+    const entry = this.activeTabId ? this.tabs.get(this.activeTabId) : null
+    entry?.view?.setBounds(area)
+  }
+
+  /**
+   * Affiche exactement les vues `ids` (1 en plein écran, 2 en division) : masque les vues visibles
+   * absentes de la liste, réveille/crée les demandées, applique les bounds puis les rend visibles et
+   * donne le focus au pane `focusedId`. Une page interne (`prism://`) n'a pas de vue native (peinte
+   * par le chrome React) mais reste comptée comme « visible ».
+   */
+  private showViews(ids: string[], focusedId: string | null): void {
+    for (const vid of this.visibleIds) if (!ids.includes(vid)) this.hideView(vid)
+    this.visibleIds = []
+    this.lastLayoutSig = null
+
+    for (const id of ids) {
+      const entry = this.tabs.get(id)
+      if (!entry) continue
+      if (isInternalUrl(entry.meta.url)) {
+        if (entry.meta.isHibernated) {
+          entry.meta.isHibernated = false
+          this.emitStore(id, { isHibernated: false })
+        }
+        this.visibleIds.push(id)
+        continue
+      }
+      const view = this.ensureView(id)
+      if (view && !view.webContents.isDestroyed()) this.visibleIds.push(id)
+    }
+
+    this.applyBoundsNow()
+
+    for (const id of this.visibleIds) {
+      const view = this.tabs.get(id)?.view
+      if (view && !view.webContents.isDestroyed()) view.setVisible(true)
+    }
+    if (focusedId) {
+      const fv = this.tabs.get(focusedId)?.view
+      if (fv && !fv.webContents.isDestroyed()) fv.webContents.focus()
     }
   }
 
-  private applyBoundsNow(): void {
-    const b = this.computeBounds()
-    const sig = JSON.stringify({ b, active: this.activeTabId })
-    if (sig === this.lastLayoutSig) return // rien n'a changé : pas de setBounds inutile
-    this.lastLayoutSig = sig
-    const entry = this.activeTabId ? this.tabs.get(this.activeTabId) : null
-    entry?.view?.setBounds(b)
+  /** Un onglet est-il protégé de l'éviction d'hibernation (affiché en plein écran / dans un split) ? */
+  private isProtected(id: string): boolean {
+    return id === this.activeTabId || this.visibleIds.includes(id)
   }
 
   /**
@@ -293,40 +337,33 @@ export class TabManager {
     }
   }
 
-  /** Active un onglet : réveille sa vue, masque l'ancienne, gère le focus explicite. */
+  /**
+   * Active un onglet en plein écran : dissout toute vue divisée, réveille sa vue, masque les
+   * anciennes, gère le focus explicite. `WebContents` n'expose pas `blur()` : `focus()` sur la
+   * nouvelle vue retire implicitement le focus de l'ancienne (masquée par `showViews`).
+   */
   activateTab(id: string): void {
     const entry = this.tabs.get(id)
     if (!entry) return
-
-    // Masquer l'ancienne vue active. `WebContents` n'expose pas `blur()` : focus() sur la nouvelle
-    // vue (plus bas) retire implicitement le focus de l'ancienne, et setVisible(false) la sort du rendu.
-    if (this.activeTabId && this.activeTabId !== id) this.hideView(this.activeTabId)
-
+    this.activeSplit = null
     this.activeTabId = id
     entry.lastActive = Date.now()
-    // L'identité de la vue active a pu changer (interne↔normale, ou vue recréée) : on force le
-    // recompute des bounds (le garde `lastLayoutSig` ne voit sinon pas le changement de vue).
-    this.lastLayoutSig = null
+    this.showViews([id], id)
+    this.enforceHibernation()
+  }
 
-    // Page interne : aucune vue à afficher, le chrome React peint la zone contenu.
-    if (isInternalUrl(entry.meta.url)) {
-      if (entry.meta.isHibernated) {
-        entry.meta.isHibernated = false
-        this.emitStore(id, { isHibernated: false })
-      }
-      this.applyBoundsNow()
-      this.enforceHibernation()
-      return
-    }
-
-    const view = this.ensureView(id)
-    if (view && !view.webContents.isDestroyed()) {
-      // Le Main applique les bounds (source de vérité) avant d'afficher.
-      this.applyBoundsNow()
-      view.setVisible(true)
-      view.webContents.focus()
-    }
-
+  /** Active une vue divisée : affiche les deux vues natives côte à côte / empilées. */
+  activateSplit(payload: SplitActivatePayload): void {
+    const [a, b] = payload.tabIds
+    const ea = this.tabs.get(a)
+    const eb = this.tabs.get(b)
+    if (!ea || !eb) return
+    this.activeSplit = payload
+    this.activeTabId = payload.focusedId
+    const now = Date.now()
+    ea.lastActive = now
+    eb.lastActive = now
+    this.showViews(payload.tabIds, payload.focusedId)
     this.enforceHibernation()
   }
 
@@ -359,6 +396,10 @@ export class TabManager {
     if (!entry) return
     this.destroyView(entry)
     this.tabs.delete(id)
+    this.visibleIds = this.visibleIds.filter((v) => v !== id)
+    // Fermer un panneau dissout la division : le Renderer réactive ensuite l'onglet restant en plein
+    // écran via TAB_ACTIVATE.
+    if (this.activeSplit && this.activeSplit.tabIds.includes(id)) this.activeSplit = null
     if (this.activeTabId === id) this.activeTabId = null
   }
 
@@ -463,7 +504,7 @@ export class TabManager {
 
     // Candidats à la destruction : inactifs, pas l'onglet actif, triés LRU.
     const evictable = live
-      .filter(([id, e]) => id !== this.activeTabId && now - e.lastActive > HIBERNATE_AFTER_MS)
+      .filter(([id, e]) => !this.isProtected(id) && now - e.lastActive > HIBERNATE_AFTER_MS)
       .sort((a, b) => a[1].lastActive - b[1].lastActive)
 
     // Si rien n'est "vieux", on autorise quand même l'éviction du plus ancien non actif
@@ -472,7 +513,7 @@ export class TabManager {
       evictable.length > 0
         ? evictable
         : live
-            .filter(([id]) => id !== this.activeTabId)
+            .filter(([id]) => !this.isProtected(id))
             .sort((a, b) => a[1].lastActive - b[1].lastActive)
 
     let toEvict = live.length - MAX_LIVE_VIEWS

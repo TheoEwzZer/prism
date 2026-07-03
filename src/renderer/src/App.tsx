@@ -3,6 +3,7 @@ import { TopBar } from './components/TopBar'
 import { Sidebar } from './components/Sidebar'
 import { WebViewArea } from './components/WebViewArea'
 import { SidebarPeekTrigger } from './components/SidebarPeekTrigger'
+import { SplitPaneBars } from './components/SplitPaneBars'
 import { useTabEvents } from './hooks/useTabEvents'
 import { useSidebarLayout } from './hooks/useSidebarLayout'
 import { useSession, usePersistUiState } from './hooks/useSession'
@@ -62,6 +63,8 @@ function App(): React.JSX.Element {
         <Sidebar />
         <WebViewArea />
       </div>
+      {/* Barres d'outils par panneau (vue divisée), positionnées en absolu au-dessus des vues. */}
+      <SplitPaneBars />
       <SidebarPeekTrigger />
     </div>
   )

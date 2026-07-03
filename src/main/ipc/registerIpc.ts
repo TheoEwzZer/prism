@@ -1,4 +1,5 @@
 import { ipcMain, shell, clipboard, net, type BrowserWindow } from 'electron'
+import { randomUUID } from 'crypto'
 import {
   IPC,
   clampSidebarWidth,
@@ -11,7 +12,13 @@ import {
   type SiteControlPayload,
   type CommandPalettePayload,
   type TabMenuPayload,
-  type HistoryListInput
+  type HistoryListInput,
+  type SplitActivatePayload,
+  type SplitMenuPayload,
+  type SplitCreateInput,
+  type SplitCreatedPayload,
+  type SplitState,
+  type SplitOrientation
 } from '@shared/types'
 import { TabManager } from '../tabs/TabManager'
 import { OverlayLayer } from '../overlay/OverlayLayer'
@@ -201,7 +208,22 @@ export function setupBrowser(window: BrowserWindow, initialSession: SessionData)
   // immédiatement (vue recréée + URL chargée) pour rouvrir « direct » à la restauration, sans
   // flash « lune ». Fait ici côté Main pour que `session:get` le renvoie déjà non hiberné.
   if (session.activeTabId && initialSession.tabs.some((t) => t.id === session.activeTabId)) {
-    tabManager.activateTab(session.activeTabId)
+    // Si l'onglet actif appartient à une vue divisée persistée dont les DEUX onglets existent
+    // encore, on restaure la division ; sinon activation plein écran classique.
+    const split = session.splits.find(
+      (s) =>
+        s.tabIds.includes(session.activeTabId!) &&
+        s.tabIds.every((id) => initialSession.tabs.some((t) => t.id === id))
+    )
+    if (split) {
+      tabManager.activateSplit({
+        orientation: split.orientation,
+        tabIds: split.tabIds,
+        focusedId: session.activeTabId
+      })
+    } else {
+      tabManager.activateTab(session.activeTabId)
+    }
   }
 
   // --- Persistance (debouncée) ---
@@ -211,6 +233,7 @@ export function setupBrowser(window: BrowserWindow, initialSession: SessionData)
       folders: session.folders,
       order: session.order,
       pinnedTabIds: session.pinnedTabIds,
+      splits: session.splits,
       activeTabId: tabManager.getActiveTabId() ?? session.activeTabId,
       sidebarWidth: session.sidebarWidth,
       sidebarCollapsed: session.sidebarCollapsed
@@ -248,10 +271,53 @@ export function setupBrowser(window: BrowserWindow, initialSession: SessionData)
       order: session.order,
       pinnedTabIds: session.pinnedTabIds,
       folders: session.folders,
+      splits: session.splits,
       activeTabId: session.activeTabId
     }
     if (!window.isDestroyed()) window.webContents.send(IPC.UI_STATE_SYNC, sync)
     if (overlay.webContentsId !== null) overlay.forward(IPC.UI_STATE_SYNC, sync)
+    persist()
+  })
+  ipcMain.on(IPC.SPLIT_ACTIVATE, (_e, payload: SplitActivatePayload) => {
+    tabManager.activateSplit(payload)
+    session.activeTabId = payload.focusedId
+    persist()
+  })
+  // Création d'une vue divisée, orchestrée côté Main : crée un panneau vierge, forme la division,
+  // l'active, ouvre la palette de commande sur ce nouveau panneau (le site choisi s'affiche de ce
+  // côté), puis fait converger les DEUX fenêtres (le nouvel onglet via tab:created, la division +
+  // l'onglet actif via ui:stateSync — anti-écho). Le panneau a AUSSI sa propre barre d'outils
+  // (per-pane omnibox) pour renaviguer ensuite.
+  ipcMain.on(IPC.SPLIT_CREATE, (_e, input: SplitCreateInput) => {
+    const source = input?.sourceId
+    if (!source) return
+    // Pas de division imbriquée (MVP) : ignore si l'onglet source est déjà membre d'un split.
+    if (session.splits.some((s) => s.tabIds.includes(source))) return
+
+    const meta = tabManager.createTab({ url: '', activate: false })
+    const newId = meta.id
+
+    const orientation: SplitOrientation =
+      input.position === 'right' || input.position === 'left' ? 'horizontal' : 'vertical'
+    const tabIds: [string, string] =
+      input.position === 'right' || input.position === 'bottom' ? [source, newId] : [newId, source]
+    const split: SplitState = { id: randomUUID(), orientation, tabIds }
+
+    session.splits = [...session.splits, split]
+    tabManager.activateSplit({ orientation, tabIds, focusedId: newId })
+    session.activeTabId = newId
+
+    // Diffusion ATOMIQUE (onglet + division + focus) aux deux fenêtres : chacune applique le tout en
+    // un seul `set`, donc `splits` n'est jamais vide pendant que le nouvel onglet existe (pas de
+    // saveUiState obsolète qui écraserait la division).
+    const created: SplitCreatedPayload = { tab: meta, split, focusedId: newId }
+    broadcast(IPC.SPLIT_CREATED, created)
+
+    // Palette de commande ciblant le NOUVEAU panneau. Ouverte ici (côté Main) AVANT que la fermeture
+    // du menu split (OVERLAY_SPLIT_MENU_CLOSE, IPC suivante) ne pose son `lastHideAt` — sinon la
+    // garde anti-rebond partagée bloquerait l'ouverture. `split` → Entrée navigue ce panneau ;
+    // choisir un onglet ouvert y charge son URL (pas de switch, qui dissoudrait le split).
+    overlay.toggleCommand({ mode: 'split', activeId: newId })
     persist()
   })
   ipcMain.on(IPC.TAB_NAVIGATE, (_e, payload: { id: string; input: string }) => {
@@ -328,6 +394,10 @@ export function setupBrowser(window: BrowserWindow, initialSession: SessionData)
   ipcMain.on(IPC.OVERLAY_CLOSE, () => overlay.hideSiteControl())
   ipcMain.on(IPC.OVERLAY_TAB_MENU, (_e, payload: TabMenuPayload) => overlay.openTabMenu(payload))
   ipcMain.on(IPC.OVERLAY_TAB_MENU_CLOSE, () => overlay.hideTabMenu())
+  ipcMain.on(IPC.OVERLAY_SPLIT_MENU, (_e, payload: SplitMenuPayload) =>
+    overlay.toggleSplitMenu(payload)
+  )
+  ipcMain.on(IPC.OVERLAY_SPLIT_MENU_CLOSE, () => overlay.hideSplitMenu())
   ipcMain.on(IPC.OVERLAY_COMMAND, (_e, payload: CommandPalettePayload) =>
     overlay.toggleCommand(payload)
   )
@@ -360,6 +430,7 @@ export function setupBrowser(window: BrowserWindow, initialSession: SessionData)
     session.order = ui.order
     session.pinnedTabIds = ui.pinnedTabIds
     session.folders = ui.folders
+    session.splits = ui.splits
     session.activeTabId = ui.activeTabId
     // La largeur/repli de la sidebar sont propres à la fenêtre principale : l'overlay (qui
     // ne rend pas le toggle) ne doit jamais les écraser avec ses valeurs par défaut.
@@ -374,6 +445,7 @@ export function setupBrowser(window: BrowserWindow, initialSession: SessionData)
       order: session.order,
       pinnedTabIds: session.pinnedTabIds,
       folders: session.folders,
+      splits: session.splits,
       activeTabId: session.activeTabId
     }
     if (!window.isDestroyed() && window.webContents.id !== event.sender.id) {
@@ -424,6 +496,8 @@ export function setupBrowser(window: BrowserWindow, initialSession: SessionData)
     ipcMain.removeAllListeners(IPC.TAB_FORWARD)
     ipcMain.removeAllListeners(IPC.TAB_RELOAD)
     ipcMain.removeAllListeners(IPC.TAB_HIBERNATE)
+    ipcMain.removeAllListeners(IPC.SPLIT_ACTIVATE)
+    ipcMain.removeAllListeners(IPC.SPLIT_CREATE)
     ipcMain.removeAllListeners(IPC.TAB_RENAME)
     ipcMain.removeAllListeners(IPC.VIEW_SET_SIDEBAR)
     ipcMain.removeAllListeners(IPC.OPEN_EXTERNAL)
@@ -432,6 +506,8 @@ export function setupBrowser(window: BrowserWindow, initialSession: SessionData)
     ipcMain.removeAllListeners(IPC.OVERLAY_CLOSE)
     ipcMain.removeAllListeners(IPC.OVERLAY_TAB_MENU)
     ipcMain.removeAllListeners(IPC.OVERLAY_TAB_MENU_CLOSE)
+    ipcMain.removeAllListeners(IPC.OVERLAY_SPLIT_MENU)
+    ipcMain.removeAllListeners(IPC.OVERLAY_SPLIT_MENU_CLOSE)
     ipcMain.removeAllListeners(IPC.OVERLAY_COMMAND)
     ipcMain.removeAllListeners(IPC.OVERLAY_COMMAND_CLOSE)
     ipcMain.removeAllListeners(IPC.OVERLAY_SET_IGNORE)
