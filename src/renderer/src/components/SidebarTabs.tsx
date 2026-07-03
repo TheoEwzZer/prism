@@ -220,14 +220,33 @@ export function SidebarTabs(): React.JSX.Element {
       setIndicator({ zone, index: (zone === 'fav' ? visualFavBase : visualCurBase).length })
       return
     }
+
     const list = zone === 'fav' ? visualFavBase : visualCurBase
     const pos = list.indexOf(overId)
-    const activeRect = e.active.rect.current.translated
-    const overRect = e.over?.rect
-    const after =
-      activeRect && overRect
-        ? activeRect.top + activeRect.height / 2 > overRect.top + overRect.height / 2
-        : false
+    const activeZone = zoneOfId(activeId)
+
+    let after = false
+    if (activeZone === zone) {
+      // Déplacement intra-zone : on se base sur la direction pour ne jamais afficher 
+      // de position d'insertion "fantôme" qui ne changerait pas l'ordre final.
+      const activePos = list.indexOf(activeId)
+      if (activePos < pos) {
+        after = true
+      } else if (activePos > pos) {
+        after = false
+      } else {
+        after = false
+      }
+    } else {
+      // Déplacement inter-zones : on se base sur la géométrie
+      const activeRect = e.active.rect.current.translated
+      const overRect = e.over?.rect
+      after =
+        activeRect && overRect
+          ? activeRect.top + activeRect.height / 2 > overRect.top + overRect.height / 2
+          : false
+    }
+    
     setIndicator({ zone, index: pos + (after ? 1 : 0) })
   }
 
