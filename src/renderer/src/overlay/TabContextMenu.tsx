@@ -68,7 +68,7 @@ export function TabContextMenu({ data }: Readonly<{ data: TabMenuPayload }>): Re
       data-overlay-hit="tabmenu"
       style={{ left: pos.left, top: pos.top, minWidth: MENU_WIDTH, width: 'max-content' }}
       className={cn(
-        'pointer-events-auto absolute overflow-visible rounded-lg border border-white/10',
+        'pointer-events-auto absolute z-100 overflow-visible rounded-lg border border-white/10',
         'bg-popover p-1 text-slate-200 shadow-2xl shadow-black/60'
       )}
     >
