@@ -107,8 +107,13 @@ export const TabItem = memo(function TabItem({
   }
 
   const doClose = (): void => {
+    const wasActive = useTabsStore.getState().activeTabId === id
     window.prism.closeTab(id)
     removeTab(id)
+    if (wasActive) {
+      const nextActive = useTabsStore.getState().activeTabId
+      if (nextActive) window.prism.activateTab(nextActive)
+    }
   }
 
   const closeOrReset = (e: React.MouseEvent): void => {
