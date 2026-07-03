@@ -289,15 +289,11 @@ export function SidebarTabs(): React.JSX.Element {
       return [vid]
     })
     const wasActiveId = useTabsStore.getState().activeTabId
-    let closedActive = false
-    for (const id of idsToClose) {
-      if (id === wasActiveId) closedActive = true
+    const finalIdsToClose = idsToClose.filter(id => id !== wasActiveId)
+    
+    for (const id of finalIdsToClose) {
       window.prism.closeTab(id)
       removeTab(id)
-    }
-    if (closedActive) {
-      const nextActive = useTabsStore.getState().activeTabId
-      if (nextActive) window.prism.activateTab(nextActive)
     }
   }
 
