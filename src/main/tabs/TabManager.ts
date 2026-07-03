@@ -6,10 +6,13 @@ import {
   contentArea,
   splitPaneLayout,
   VIEW_RADIUS,
+  VIEW_INSET,
   type TabState,
   type TabPatch,
   type CreateTabInput,
-  type SplitActivatePayload
+  type SplitActivatePayload,
+  type PageMenuPayload,
+  type PageMenuAction
 } from '@shared/types'
 import { FrameCoalescer } from '../utils/scheduler'
 
@@ -40,6 +43,9 @@ function restoredTitle(meta: TabState): string {
 /** Réglages d'hibernation (ajustables). Les constantes de layout viennent de `@shared/types`. */
 const HIBERNATE_AFTER_MS = 15 * 60 * 1000 // marque un onglet inactif comme éligible
 const MAX_LIVE_VIEWS = 8 // cap strict de WebContentsView vivantes (LRU au-delà)
+/** Part de la largeur de la zone contenu réservée au panneau DevTools (docké à droite). */
+const DEVTOOLS_RATIO = 0.4
+const DEVTOOLS_MIN_WIDTH = 320
 
 interface TabEntry {
   meta: TabState
@@ -69,6 +75,10 @@ export class TabManager {
   private activeSplit: SplitActivatePayload | null = null
   // Ids des vues natives actuellement affichées (1 en plein écran, 2 en division).
   private visibleIds: string[] = []
+  // DevTools dockés à droite : rendus dans NOTRE propre WebContentsView (une vue de WebContentsView
+  // native ne peut pas docker ses DevTools dans la BrowserWindow → sinon fenêtre détachée). On la
+  // positionne nous-mêmes à droite de la page. `null` si fermés.
+  private devtools: { ownerId: string; view: WebContentsView } | null = null
 
   // Largeur de sidebar *effective* utilisée pour le layout de la vue web (0 si repliée).
   private effectiveSidebar = 256
@@ -84,6 +94,8 @@ export class TabManager {
     private readonly onCommandShortcut: () => void = () => {},
     /** Ouvre la page Historique (Ctrl+H depuis une page ayant le focus). */
     private readonly onHistoryShortcut: () => void = () => {},
+    /** Ouvre le menu contextuel de page (clic droit dans la vue web native). */
+    private readonly onPageMenu: (payload: PageMenuPayload) => void = () => {},
     /** Hooks d'historique (optionnels). */
     private readonly history?: HistoryHooks
   ) {
@@ -109,7 +121,8 @@ export class TabManager {
 
   private applyBoundsNow(): void {
     const { width, height } = this.window.getContentBounds()
-    const sig = JSON.stringify({ width, height, sb: this.effectiveSidebar, active: this.activeTabId, split: this.activeSplit }) // prettier-ignore
+    const dt = this.devtools
+    const sig = JSON.stringify({ width, height, sb: this.effectiveSidebar, active: this.activeTabId, split: this.activeSplit, dt: dt?.ownerId ?? null }) // prettier-ignore
     if (sig === this.lastLayoutSig) return // rien n'a changé : pas de setBounds inutile
     this.lastLayoutSig = sig
     if (this.activeSplit) {
@@ -126,6 +139,22 @@ export class TabManager {
     }
     const area = contentArea(width, height, this.effectiveSidebar)
     const entry = this.activeTabId ? this.tabs.get(this.activeTabId) : null
+    // DevTools ouverts pour l'onglet actif : la page prend la moitié gauche, DevTools la droite.
+    if (dt && dt.ownerId === this.activeTabId && entry?.view) {
+      const dtWidth = Math.min(
+        area.width,
+        Math.max(DEVTOOLS_MIN_WIDTH, Math.round(area.width * DEVTOOLS_RATIO))
+      )
+      const pageWidth = Math.max(0, area.width - dtWidth - VIEW_INSET)
+      entry.view.setBounds({ x: area.x, y: area.y, width: pageWidth, height: area.height })
+      dt.view.setBounds({
+        x: area.x + pageWidth + VIEW_INSET,
+        y: area.y,
+        width: Math.max(0, area.width - pageWidth - VIEW_INSET),
+        height: area.height
+      })
+      return
+    }
     entry?.view?.setBounds(area)
   }
 
@@ -136,6 +165,8 @@ export class TabManager {
    * par le chrome React) mais reste comptée comme « visible ».
    */
   private showViews(ids: string[], focusedId: string | null): void {
+    // DevTools attachés à un onglet qui n'est plus affiché → on les ferme (ils sont per-vue active).
+    if (this.devtools && !ids.includes(this.devtools.ownerId)) this.closeDevToolsPanel()
     for (const vid of this.visibleIds) if (!ids.includes(vid)) this.hideView(vid)
     this.visibleIds = []
     this.lastLayoutSig = null
@@ -267,7 +298,36 @@ export class TabManager {
       return { action: 'deny' }
     })
     wc.on('will-navigate', (event, url) => {
-      if (!/^(https?|about):/.test(url)) event.preventDefault()
+      if (!/^(https?|about|view-source):/.test(url)) event.preventDefault()
+    })
+
+    // Clic droit dans la page : l'event natif est capté ici (aucun menu natif n'est construit) et
+    // relayé à la couche d'overlay, qui rend un menu React AU-DESSUS de la vue native (façon Arc).
+    // `params.x/y` sont relatifs à la page ; on ajoute l'offset des bounds de la vue pour obtenir des
+    // coordonnées client alignées 1:1 sur la fenêtre principale (donc sur l'overlay).
+    wc.on('context-menu', (_e, params) => {
+      if (wc.isDestroyed()) return
+      const b = view.getBounds()
+      this.onPageMenu({
+        tabId: id,
+        x: b.x + params.x,
+        y: b.y + params.y,
+        pageX: params.x,
+        pageY: params.y,
+        canGoBack: wc.navigationHistory.canGoBack(),
+        canGoForward: wc.navigationHistory.canGoForward(),
+        linkURL: params.linkURL,
+        srcURL: params.srcURL,
+        mediaType: params.mediaType,
+        selectionText: params.selectionText,
+        isEditable: params.isEditable,
+        editFlags: {
+          canCut: params.editFlags.canCut,
+          canCopy: params.editFlags.canCopy,
+          canPaste: params.editFlags.canPaste
+        },
+        pageURL: params.pageURL || this.tabs.get(id)?.meta.url || ''
+      })
     })
 
     // F12 / Ctrl+Shift+I → notre DevTools docké géré (et on empêche le DevTools natif docké
@@ -286,6 +346,12 @@ export class TabManager {
         // l'onglet interne prism://history/ (le chrome React n'a pas reçu ce keydown).
         event.preventDefault()
         this.onHistoryShortcut()
+      } else if (isReloadShortcut(input)) {
+        // Ctrl+R / F5 : le menu applicatif (et donc ses accélérateurs par défaut) est désactivé →
+        // on recâble le rechargement ici. Ctrl+Shift+R force le contournement du cache.
+        event.preventDefault()
+        if (input.shift) wc.reloadIgnoringCache()
+        else wc.reload()
       }
     })
 
@@ -408,15 +474,104 @@ export class TabManager {
   // ---------------------------------------------------------------------------
 
   /**
-   * Ouvre/ferme le DevTools NATIF de la page active. Chromium gère lui-même la barre
-   * d'outils complète (dont le bouton fermer), le dock et le redimensionnement fluide.
-   * On ne bricole plus de vue/splitter/instantanés.
+   * Ouvre/ferme les DevTools de la page active, dockés à DROITE. Comme la page est une
+   * `WebContentsView` (et non le `webContents` de la fenêtre), Chromium ne peut pas docker ses
+   * DevTools dans la BrowserWindow : `openDevTools({ mode: 'right' })` retombait sur une fenêtre
+   * détachée. On les rend donc dans NOTRE propre `WebContentsView` (`setDevToolsWebContents`) que
+   * l'on positionne à droite via `applyBoundsNow`, la page occupant la moitié gauche.
    */
   toggleDevTools(): void {
-    const wc = this.activeTabId ? this.tabs.get(this.activeTabId)?.view?.webContents : null
+    const id = this.activeTabId
+    if (!id) return
+    if (this.devtools?.ownerId === id) this.closeDevToolsPanel()
+    else this.openDevToolsPanel(id)
+  }
+
+  /**
+   * Ouvre (ou réutilise) le panneau DevTools docké à droite pour l'onglet `id`. Retourne le
+   * `webContents` de la page inspectée (pour enchaîner un `inspectElement`), ou `null`.
+   */
+  private openDevToolsPanel(id: string): Electron.WebContents | null {
+    const wc = this.tabs.get(id)?.view?.webContents
+    if (!wc || wc.isDestroyed()) return null
+    if (this.devtools?.ownerId === id) return wc // déjà ouverts pour cet onglet
+    // Fermer d'éventuels DevTools d'un autre onglet avant d'en ouvrir de nouveaux.
+    this.closeDevToolsPanel()
+
+    const dtView = new WebContentsView()
+    dtView.setBorderRadius(VIEW_RADIUS)
+    this.window.contentView.addChildView(dtView)
+    wc.setDevToolsWebContents(dtView.webContents)
+    // `detach` : on gère nous-mêmes le placement (aucune fenêtre native n'est créée puisque la cible
+    // DevTools est notre WebContentsView).
+    wc.openDevTools({ mode: 'detach' })
+    this.devtools = { ownerId: id, view: dtView }
+
+    // Fermeture depuis l'UI DevTools (bouton × / Échap dans l'inspecteur) → nettoie notre vue.
+    wc.once('devtools-closed', () => {
+      if (this.devtools?.ownerId === id) this.closeDevToolsPanel()
+    })
+
+    this.lastLayoutSig = null
+    this.applyBoundsNow()
+    dtView.setVisible(true)
+    dtView.webContents.focus()
+    return wc
+  }
+
+  /** Ferme le panneau DevTools docké (le cas échéant) et rétablit la page en pleine largeur. */
+  private closeDevToolsPanel(): void {
+    const dt = this.devtools
+    if (!dt) return
+    this.devtools = null
+    const wc = this.tabs.get(dt.ownerId)?.view?.webContents
+    if (wc && !wc.isDestroyed() && wc.isDevToolsOpened()) wc.closeDevTools()
+    try {
+      this.window.contentView.removeChildView(dt.view)
+      if (!dt.view.webContents.isDestroyed()) dt.view.webContents.close()
+    } catch (err) {
+      console.error('[TabManager] closeDevToolsPanel', err)
+    }
+    this.lastLayoutSig = null
+    this.applyBoundsNow()
+  }
+
+  /**
+   * Exécute une action du menu contextuel de page qui nécessite le `WebContents` natif de l'onglet
+   * (impression, inspection, copie/enregistrement d'image, presse-papiers d'un champ éditable). Les
+   * actions purement UI (copier une URL, ouvrir un onglet) sont gérées côté Renderer.
+   */
+  pageAction(tabId: string, action: PageMenuAction): void {
+    const wc = this.tabs.get(tabId)?.view?.webContents
     if (!wc || wc.isDestroyed()) return
-    if (wc.isDevToolsOpened()) wc.closeDevTools()
-    else wc.openDevTools({ mode: 'right' })
+    switch (action.type) {
+      case 'print':
+        wc.print()
+        break
+      case 'copyImage':
+        wc.copyImageAt(action.x, action.y)
+        break
+      case 'saveImage':
+      case 'saveLink':
+        if (action.url) wc.downloadURL(action.url)
+        break
+      case 'inspect':
+        // Ouvre nos DevTools dockés à droite (pas une fenêtre détachée) puis pointe l'élément.
+        this.openDevToolsPanel(tabId)?.inspectElement(action.x, action.y)
+        break
+      case 'cut':
+        wc.cut()
+        break
+      case 'copy':
+        wc.copy()
+        break
+      case 'paste':
+        wc.paste()
+        break
+      case 'selectAll':
+        wc.selectAll()
+        break
+    }
   }
 
   navigate(id: string, input: string): void {
@@ -531,6 +686,8 @@ export class TabManager {
   private destroyView(entry: TabEntry): void {
     const view = entry.view
     if (!view) return
+    // Détruire la vue propriétaire des DevTools → fermer d'abord le panneau docké.
+    if (this.devtools && this.tabs.get(this.devtools.ownerId) === entry) this.closeDevToolsPanel()
     try {
       this.window.contentView.removeChildView(view)
       // `WebContents.close()` = méthode publique de destruction : libère le process de
@@ -578,6 +735,13 @@ function isHistoryShortcut(input: Electron.Input): boolean {
   return input.control && !input.shift && !input.alt && input.key.toLowerCase() === 'h'
 }
 
+/** Détecte Ctrl+R, Ctrl+Shift+R ou F5 (keydown) pour recharger la page. */
+function isReloadShortcut(input: Electron.Input): boolean {
+  if (input.type !== 'keyDown') return false
+  if (input.key === 'F5') return true
+  return input.control && !input.alt && input.key.toLowerCase() === 'r'
+}
+
 /** Détecte Ctrl+T (keydown) pour ouvrir la palette de commande. */
 function isNewTabShortcut(input: Electron.Input): boolean {
   if (input.type !== 'keyDown') return false
@@ -596,6 +760,8 @@ function normalizeInput(raw: string): string {
     return `prism://${rest.toLowerCase()}/`
   }
   if (/^https?:\/\//i.test(input) || input.startsWith('about:')) return input
+  // Affichage du code source d'une page (menu contextuel) : conservé tel quel.
+  if (/^view-source:/i.test(input)) return input
   // Domaine "brut" (contient un point sans espace) → https://
   if (/^[^\s]+\.[^\s]+$/.test(input) && !input.includes(' ')) return `https://${input}`
   return `https://www.google.com/search?q=${encodeURIComponent(input)}`

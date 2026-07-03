@@ -21,7 +21,8 @@ import {
   type SplitState,
   type SplitOrientation,
   type SplitPaneMenuPayload,
-  type SplitDetachPayload
+  type SplitDetachPayload,
+  type PageMenuActionInput
 } from '@shared/types'
 import { TabManager } from '../tabs/TabManager'
 import { OverlayLayer } from '../overlay/OverlayLayer'
@@ -200,6 +201,7 @@ export function setupBrowser(window: BrowserWindow, initialSession: SessionData)
       // interne prism://history/ (la logique ouvrir-ou-focus vit côté Renderer, source de l'UI state).
       if (!window.isDestroyed()) window.webContents.send(IPC.HISTORY_OPEN)
     },
+    (payload) => overlay.openPageMenu(payload),
     { visit: recordVisit, updateMeta }
   )
 
@@ -297,7 +299,7 @@ export function setupBrowser(window: BrowserWindow, initialSession: SessionData)
     // Pas de division imbriquée (MVP) : ignore si l'onglet source est déjà membre d'un split.
     if (session.splits.some((s) => s.tabIds.includes(source))) return
 
-    const meta = tabManager.createTab({ url: '', activate: false })
+    const meta = tabManager.createTab({ url: input.url ?? '', activate: false })
     const newId = meta.id
 
     const orientation: SplitOrientation =
@@ -320,7 +322,8 @@ export function setupBrowser(window: BrowserWindow, initialSession: SessionData)
     // du menu split (OVERLAY_SPLIT_MENU_CLOSE, IPC suivante) ne pose son `lastHideAt` — sinon la
     // garde anti-rebond partagée bloquerait l'ouverture. `split` → Entrée navigue ce panneau ;
     // choisir un onglet ouvert y charge son URL (pas de switch, qui dissoudrait le split).
-    overlay.toggleCommand({ mode: 'split', activeId: newId })
+    // On saute la palette quand une URL est fournie (ex. « Ouvrir le lien dans une vue divisée »).
+    if (!input.url) overlay.toggleCommand({ mode: 'split', activeId: newId })
     persist()
   })
 
@@ -487,6 +490,11 @@ export function setupBrowser(window: BrowserWindow, initialSession: SessionData)
     overlay.togglePaneMenu(payload)
   )
   ipcMain.on(IPC.OVERLAY_PANE_MENU_CLOSE, () => overlay.hidePaneMenu())
+  ipcMain.on(IPC.OVERLAY_PAGE_MENU_CLOSE, () => overlay.hidePageMenu())
+  ipcMain.on(IPC.OVERLAY_PAGE_ACTION, (_e, input: PageMenuActionInput) => {
+    overlay.hidePageMenu()
+    tabManager.pageAction(input.tabId, input.action)
+  })
   ipcMain.on(IPC.OVERLAY_COMMAND, (_e, payload: CommandPalettePayload) =>
     overlay.toggleCommand(payload)
   )
@@ -603,6 +611,8 @@ export function setupBrowser(window: BrowserWindow, initialSession: SessionData)
     ipcMain.removeAllListeners(IPC.OVERLAY_SPLIT_MENU_CLOSE)
     ipcMain.removeAllListeners(IPC.OVERLAY_PANE_MENU)
     ipcMain.removeAllListeners(IPC.OVERLAY_PANE_MENU_CLOSE)
+    ipcMain.removeAllListeners(IPC.OVERLAY_PAGE_MENU_CLOSE)
+    ipcMain.removeAllListeners(IPC.OVERLAY_PAGE_ACTION)
     ipcMain.removeAllListeners(IPC.OVERLAY_COMMAND)
     ipcMain.removeAllListeners(IPC.OVERLAY_COMMAND_CLOSE)
     ipcMain.removeAllListeners(IPC.OVERLAY_SET_IGNORE)

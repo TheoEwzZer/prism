@@ -25,7 +25,9 @@ import {
   type SplitCreatedPayload,
   type SplitFromTabsInput,
   type SplitPaneMenuPayload,
-  type SplitDetachPayload
+  type SplitDetachPayload,
+  type PageMenuPayload,
+  type PageMenuAction
 } from '@shared/types'
 
 /** Abonnement typé à un event Main -> Renderer ; retourne une fonction de désabonnement. */
@@ -107,6 +109,12 @@ const prism = {
   closePaneMenu: (): void => ipcRenderer.send(IPC.OVERLAY_PANE_MENU_CLOSE),
   closeSidebarPeek: (): void => ipcRenderer.send(IPC.SIDEBAR_PEEK_CLOSE),
   closeTabMenu: (): void => ipcRenderer.send(IPC.OVERLAY_TAB_MENU_CLOSE),
+  closePageMenu: (): void => ipcRenderer.send(IPC.OVERLAY_PAGE_MENU_CLOSE),
+  // Menu contextuel de page : exécute une action nécessitant le WebContents natif (Main).
+  pageMenuAction: (tabId: string, action: PageMenuAction): void =>
+    ipcRenderer.send(IPC.OVERLAY_PAGE_ACTION, { tabId, action }),
+  onPageMenuData: (cb: (payload: PageMenuPayload | null) => void): (() => void) =>
+    subscribe(IPC.OVERLAY_PAGE_MENU_DATA, cb),
   setOverlayIgnoreMouse: (ignore: boolean): void =>
     ipcRenderer.send(IPC.OVERLAY_SET_IGNORE, ignore),
   onSiteControlData: (cb: (payload: SiteControlPayload | null) => void): (() => void) =>

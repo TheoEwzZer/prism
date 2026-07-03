@@ -7,7 +7,8 @@ import {
   type CommandPalettePayload,
   type TabMenuPayload,
   type SplitMenuPayload,
-  type SplitPaneMenuPayload
+  type SplitPaneMenuPayload,
+  type PageMenuPayload
 } from '@shared/types'
 
 /** Durée de l'animation de repli/dépli (doit rester synchro avec la transition CSS du masque). */
@@ -37,6 +38,7 @@ export class OverlayLayer {
   private tabMenu: TabMenuPayload | null = null
   private splitMenu: SplitMenuPayload | null = null
   private paneMenu: SplitPaneMenuPayload | null = null
+  private pageMenu: PageMenuPayload | null = null
   private command: CommandPalettePayload | null = null
   private peekOpen = false
   // Largeur du peek mémorisée : conservée à la fermeture pour que le slide-out (`-translate-x-full`,
@@ -146,6 +148,25 @@ export class OverlayLayer {
     this.paneMenu = null
     this.lastHideAt = Date.now()
     this.send(IPC.OVERLAY_PANE_MENU_DATA, null)
+  }
+
+  /**
+   * Menu contextuel de la PAGE (clic droit dans la vue web). Émis par le Main depuis l'event natif
+   * `context-menu`. Prend le focus pour se fermer au clic extérieur (blur) / Échap, comme les autres
+   * menus. Rendu dans l'overlay → flotte au-dessus de la page native.
+   */
+  openPageMenu(payload: PageMenuPayload): void {
+    this.pageMenu = payload
+    const win = this.ensureWindow()
+    win.focus()
+    this.send(IPC.OVERLAY_PAGE_MENU_DATA, payload)
+  }
+
+  hidePageMenu(): void {
+    if (this.pageMenu === null) return
+    this.pageMenu = null
+    this.lastHideAt = Date.now()
+    this.send(IPC.OVERLAY_PAGE_MENU_DATA, null)
   }
 
   /**
@@ -318,6 +339,7 @@ export class OverlayLayer {
       this.send(IPC.OVERLAY_TAB_MENU_DATA, this.tabMenu)
       this.send(IPC.OVERLAY_SPLIT_MENU_DATA, this.splitMenu)
       this.send(IPC.OVERLAY_PANE_MENU_DATA, this.paneMenu)
+      this.send(IPC.OVERLAY_PAGE_MENU_DATA, this.pageMenu)
       this.send(IPC.OVERLAY_COMMAND_DATA, this.command)
       this.send(IPC.SIDEBAR_PEEK_STATE, { open: this.peekOpen, width: this.peekWidth })
     })

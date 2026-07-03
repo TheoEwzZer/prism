@@ -53,6 +53,11 @@ export interface SplitCreateInput {
   position: SplitPosition
   /** Onglet source (deviendra l'autre panneau de la division). */
   sourceId: string
+  /**
+   * URL à charger directement dans le NOUVEAU panneau (ex. « Ouvrir le lien dans une vue divisée »).
+   * Si absent, le panneau est vierge et la palette de commande s'ouvre pour choisir le site.
+   */
+  url?: string
 }
 
 /**
@@ -320,6 +325,8 @@ export const IPC = {
   OVERLAY_SPLIT_MENU_CLOSE: 'overlay:splitMenuClose', // overlay -> Main : fermer le menu split
   OVERLAY_PANE_MENU: 'overlay:paneMenu', // main -> Main : ouvrir le menu d'options d'un panneau
   OVERLAY_PANE_MENU_CLOSE: 'overlay:paneMenuClose', // overlay -> Main : fermer le menu de panneau
+  OVERLAY_PAGE_MENU_CLOSE: 'overlay:pageMenuClose', // overlay -> Main : fermer le menu contextuel de page
+  OVERLAY_PAGE_ACTION: 'overlay:pageAction', // overlay -> Main : exécuter une action sur le WebContents
   SIDEBAR_PEEK_OPEN: 'sidebar:peekOpen', // main -> Main : survol du bord gauche
   SIDEBAR_PEEK_CLOSE: 'sidebar:peekClose', // overlay -> Main : souris sortie du panneau
   SIDEBAR_SET_WIDTH: 'sidebar:setWidth', // overlay -> Main : drag de la poignée de resize (px)
@@ -333,6 +340,7 @@ export const IPC = {
   OVERLAY_TAB_MENU_DATA: 'overlay:tabMenuData', // Main -> overlay : ouvrir/fermer le menu (ou null)
   OVERLAY_SPLIT_MENU_DATA: 'overlay:splitMenuData', // Main -> overlay : ouvrir/fermer le menu split
   OVERLAY_PANE_MENU_DATA: 'overlay:paneMenuData', // Main -> overlay : ouvrir/fermer le menu de panneau
+  OVERLAY_PAGE_MENU_DATA: 'overlay:pageMenuData', // Main -> overlay : ouvrir/fermer le menu contextuel de page
   OVERLAY_COMMAND_DATA: 'overlay:commandData', // Main -> overlay : ouvrir/fermer la palette (ou null)
   HISTORY_OPEN: 'history:open', // Main -> Renderer : ouvrir/focus l'onglet prism://history/ (Ctrl+H)
   SIDEBAR_PEEK_STATE: 'sidebar:peekState', // Main -> overlay : ouverture/fermeture animée
@@ -407,6 +415,57 @@ export interface TabMenuPayload {
   isHibernated: boolean
   x: number
   y: number
+}
+
+/**
+ * Menu contextuel de la PAGE web (clic droit dans la `WebContentsView`), rendu dans la couche
+ * d'overlay (au-dessus de la vue native). Émis par le Main à partir de l'event natif `context-menu`
+ * du `WebContents`. `x`/`y` sont en coordonnées client (alignées 1:1 sur la fenêtre principale)
+ * pour positionner le menu ; `pageX`/`pageY` restent relatifs à la page (pour `inspect`/`copyImage`).
+ */
+export interface PageMenuPayload {
+  tabId: string
+  x: number
+  y: number
+  pageX: number
+  pageY: number
+  canGoBack: boolean
+  canGoForward: boolean
+  /** URL du lien sous le curseur (chaîne vide si aucun). */
+  linkURL: string
+  /** URL de la ressource média sous le curseur (image/vidéo…). */
+  srcURL: string
+  /** Type de média sous le curseur : `'none' | 'image' | 'video' | 'audio' | ...`. */
+  mediaType: string
+  /** Texte sélectionné sous le curseur (chaîne vide si aucun). */
+  selectionText: string
+  /** Le curseur est-il dans un champ éditable (input/textarea/contenteditable) ? */
+  isEditable: boolean
+  editFlags: { canCut: boolean; canCopy: boolean; canPaste: boolean }
+  /** URL de la page courante (cible de « Copier l'adresse » / « Afficher le code source »). */
+  pageURL: string
+}
+
+/**
+ * Action du menu contextuel de page qui doit s'exécuter sur le `WebContents` natif (Main). Les
+ * actions purement Renderer (copier du texte, ouvrir un onglet, rechercher) passent par les canaux
+ * existants (`copyText`, `createTab`) et ne figurent pas ici.
+ */
+export type PageMenuAction =
+  | { type: 'print' }
+  | { type: 'inspect'; x: number; y: number }
+  | { type: 'copyImage'; x: number; y: number }
+  | { type: 'saveImage'; url: string }
+  | { type: 'saveLink'; url: string }
+  | { type: 'cut' }
+  | { type: 'copy' }
+  | { type: 'paste' }
+  | { type: 'selectAll' }
+
+/** Enveloppe d'une action de menu de page (overlay -> Main). */
+export interface PageMenuActionInput {
+  tabId: string
+  action: PageMenuAction
 }
 
 /**
